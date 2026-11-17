@@ -1,0 +1,56 @@
+{
+  "name": "khet-se-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Khet Se REST API (Express + TypeScript + MongoDB)",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit && tsc -p test --noEmit",
+    "seed:catalogue": "tsx src/scripts/seed-catalogue.ts",
+    "seed:catalogue:prod": "node dist/scripts/seed-catalogue.js",
+    "test": "vitest run",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "test:watch": "vitest",
+    "bench": "tsx src/scripts/bench.ts",
+    "db:indexes": "tsx src/scripts/sync-indexes.ts",
+    "db:indexes:prod": "node dist/scripts/sync-indexes.js",
+    "loadtest": "tsx src/scripts/loadtest.ts"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.7.5",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.17.10",
+    "@types/supertest": "^6.0.2",
+    "mongodb-memory-server": "^10.1.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

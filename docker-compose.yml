@@ -1,0 +1,72 @@
+# Full Khet Se stack for local production-like runs.
+# Expects the web app checked out next to this repo:
+#   git clone https://github.com/<you>/khet-se-server.git
+#   git clone https://github.com/<you>/khet-se-client.git
+#   cd khet-se-server
+#   JWT_SECRET=$(openssl rand -hex 48) docker compose up --build
+#   docker compose run --rm api node dist/scripts/seed-catalogue.js     # once
+# Web: http://localhost:3000 · API: http://localhost:5000/api/health
+
+services:
+  mongo:
+    image: mongo:7
+    # Single-node replica set → checkout runs inside real multi-document transactions.
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first start, then reports healthy once it has a primary.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+
+  api:
+    build: .
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongo:27017/khet-se?replicaSet=rs0
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET (at least 32 characters)}
+      CLIENT_ORIGINS: http://localhost:3000
+      # Browser and API are both on localhost here (same site), so Lax cookies over http work.
+      COOKIE_SAMESITE: lax
+      COOKIE_SECURE: 'false'
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT:-KhetSe/0.1 (docker-compose)}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+    # Apply index changes, then start (autoIndex is off in production).
+    command: ['sh', '-c', 'node dist/scripts/sync-indexes.js && node dist/server.js']
+    ports:
+      - '5000:5000'
+
+  web:
+    build:
+      context: ../khet-se-client
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000/api
+    depends_on:
+      - api
+    environment:
+      API_INTERNAL_URL: http://api:5000/api
+    ports:
+      - '3000:3000'
+
+volumes:
+  mongo-data:
