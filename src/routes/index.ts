@@ -8,6 +8,8 @@ import inventoryRoutes from './inventory.routes';
 import recommendationRoutes from './recommendation.routes';
 import { addressRoutes, orderRoutes, paymentRoutes } from './order.routes';
 import { geoRoutes, uploadRoutes, userRoutes } from './misc.routes';
+import deliveryRoutes from './delivery.routes';
+import adminRoutes from './admin.routes';
 
 const router = Router();
 
@@ -31,6 +33,8 @@ router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/geo', geoRoutes);
 router.use('/uploads', uploadRoutes);
-// Later: reviews, admin
+router.use('/delivery', deliveryRoutes);
+router.use('/admin', adminRoutes);
+// Later: reviews
 
 export default router;

@@ -12,7 +12,7 @@ export interface ISession {
   tokenHash: string;
   expiresAt: Date;
   revokedAt?: Date;
-  revokedReason?: 'logout' | 'logout_all' | 'rotated' | 'reuse_detected' | 'suspended';
+  revokedReason?: 'logout' | 'logout_all' | 'rotated' | 'reuse_detected' | 'suspended' | 'password_reset';
   replacedBy?: Types.ObjectId;
   userAgent?: string;
   ip?: string;
@@ -30,7 +30,7 @@ const sessionSchema = new Schema<ISession>(
     tokenHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },
     revokedAt: Date,
-    revokedReason: { type: String, enum: ['logout', 'logout_all', 'rotated', 'reuse_detected', 'suspended'] },
+    revokedReason: { type: String, enum: ['logout', 'logout_all', 'rotated', 'reuse_detected', 'suspended', 'password_reset'] },
     replacedBy: { type: Schema.Types.ObjectId },
     userAgent: { type: String, maxlength: 300 },
     ip: { type: String, maxlength: 64 },

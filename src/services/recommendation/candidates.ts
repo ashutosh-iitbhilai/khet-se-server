@@ -14,6 +14,7 @@ import { toPoint } from '../../models/common';
 import { RECOMMENDATION } from '../../config/recommendation';
 import { escapeRegex } from '../../utils/pagination';
 import { activeCatalogue } from '../catalogue.cache';
+import { sellableFilter } from './sellable';
 import type { NearbyFarmersQuery, NearbyListingsQuery } from '../../validators/recommendation.validator';
 
 export interface FarmerDoc {
@@ -84,11 +85,11 @@ const LISTING_FIELDS = {
 
 const unique = (ids: Types.ObjectId[]) => [...new Set(ids.map(String))].map((id) => new Types.ObjectId(id));
 
-/** Active farmers (with active user accounts), optionally organic-verified only. */
+/** Active farmers (active user account, profile not rejected by an admin), optionally organic-verified only. */
 async function activeFarmers(ids: Types.ObjectId[], organicOnly?: boolean): Promise<Map<string, FarmerDoc>> {
   if (!ids.length) return new Map();
   const rows = await Farmer.find(
-    { _id: { $in: ids }, ...(organicOnly ? { 'organicCertification.status': 'verified' } : {}) },
+    { _id: { $in: ids }, profileStatus: { $ne: 'rejected' }, ...(organicOnly ? { 'organicCertification.status': 'verified' } : {}) },
     'user ratingAvg ratingCount profileStatus experienceYears organicCertification.status',
   )
     .populate<{ user: { name: string; status: string } | null }>('user', 'name status')
@@ -102,7 +103,8 @@ async function activeFarmers(ids: Types.ObjectId[], organicOnly?: boolean): Prom
 
 /** Listings near a point, joined to farm / farmer / product and filtered to what can be delivered. */
 export async function fetchListingCandidates(lng: number, lat: number, radiusKm: number, q: NearbyListingsQuery): Promise<RawListing[]> {
-  const query: Record<string, unknown> = { isActive: true, quantityAvailable: { $gt: 0 } };
+  // Only what can actually be ordered: in stock for a minimum order, not expired, not past shelf life.
+  const query: Record<string, unknown> = sellableFilter(await activeCatalogue());
   if (q.type) query.productType = q.type;
   if (q.category) query.category = q.category;
   if (q.maxPrice) query.price = { $lte: q.maxPrice };
@@ -157,7 +159,7 @@ export async function fetchFarmCandidates(lng: number, lat: number, radiusKm: nu
   ]);
   if (!farms.length) return [];
 
-  const listingQuery: Record<string, unknown> = { farm: { $in: farms.map((f) => f._id) }, isActive: true, quantityAvailable: { $gt: 0 } };
+  const listingQuery: Record<string, unknown> = { farm: { $in: farms.map((f) => f._id) }, ...sellableFilter(await activeCatalogue()) };
   if (q.type) listingQuery.productType = q.type;
   if (q.category) listingQuery.category = q.category;
   if (q.maxPrice) listingQuery.price = { $lte: q.maxPrice };

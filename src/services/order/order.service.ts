@@ -230,6 +230,8 @@ export async function getForUser(orderId: string, user: { userId: string; role: 
 interface TransitionOptions {
   actor: Actor;
   farmerId?: Types.ObjectId;
+  /** Delivery partner acting on a job assigned to them. */
+  partnerId?: Types.ObjectId;
   customerId?: string;
   note?: string;
   code?: string;
@@ -303,6 +305,17 @@ export async function transitionGroup(orderId: string, groupId: string, to: Grou
   if (!current || !group) throw ApiError.notFound('Order not found');
   if (opts.farmerId && String(group.farmer) !== String(opts.farmerId)) throw ApiError.notFound('Order not found');
   if (opts.customerId && String(current.customer) !== opts.customerId) throw ApiError.notFound('Order not found');
+  if (opts.actor === 'delivery' && (!opts.partnerId || String(group.courier?.partner) !== String(opts.partnerId))) {
+    throw ApiError.notFound('Delivery not found');
+  }
+  // Once a partner has been requested, the handover is theirs: the farmer can't also deliver it.
+  if (opts.actor === 'farmer' && group.deliveryMode === 'partner' && (to === 'out_for_delivery' || to === 'delivered')) {
+    throw ApiError.conflict(
+      group.courier
+        ? `${group.courier.name} (delivery partner) is handling this delivery`
+        : 'You asked for a delivery partner. Cancel that request to deliver it yourself.',
+    );
+  }
 
   const conflict = (status: GroupStatus) =>
     ApiError.conflict(`This order is already "${status.replace(/_/g, ' ')}" and can't be changed to "${to.replace(/_/g, ' ')}"`);
@@ -312,7 +325,7 @@ export async function transitionGroup(orderId: string, groupId: string, to: Grou
   if (opts.actor === 'farmer' && to === 'accepted' && current.paymentMethod === 'online' && current.paymentStatus === 'pending') {
     throw ApiError.conflict('This order has not been paid yet');
   }
-  if (to === 'delivered' && opts.actor === 'farmer') {
+  if (to === 'delivered' && (opts.actor === 'farmer' || opts.actor === 'delivery')) {
     if (!opts.code) throw ApiError.badRequest('Ask the customer for their 4-digit delivery code', [{ field: 'code', message: 'Required' }]);
     await checkHandoverCode(orderId, groupId, group, opts.code);
   }

@@ -21,6 +21,13 @@ export function limiter(opts: { windowMs: number; limit: number; message: string
 /** Generous global limit for all API traffic. */
 export const apiLimiter = limiter({ windowMs: 60 * 1000, limit: 300, message: 'Too many requests. Please slow down.' });
 
+/** "Forgot password" sends email: keep it to a handful per IP. */
+export const resetLimiter = limiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  message: 'Too many reset requests. Please try again in 15 minutes.',
+});
+
 /** Strict limit on credential endpoints to slow brute-force attempts. */
 export const authLimiter = limiter({
   windowMs: 15 * 60 * 1000,

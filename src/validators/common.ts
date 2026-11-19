@@ -6,6 +6,22 @@ export const objectId = z.string().refine((v) => Types.ObjectId.isValid(v), 'Inv
 
 export const idParams = z.object({ id: objectId });
 
+/**
+ * Indian mobile number in any common written form ("+91 98765 43210", "098765-43210",
+ * "9876543210") → the 10 digits we store. Anything else fails with a readable message.
+ */
+export const normalizePhone = (value: string) => {
+  let d = value.replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('91')) d = d.slice(2);
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+  return d;
+};
+export const mobile = z
+  .string({ required_error: 'Enter your mobile number' })
+  .trim()
+  .transform(normalizePhone)
+  .refine((v) => /^[6-9]\d{9}$/.test(v), 'Enter a valid 10-digit mobile number');
+
 export const pagination = {
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),

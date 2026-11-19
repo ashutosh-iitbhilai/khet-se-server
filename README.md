@@ -47,13 +47,17 @@ Demo farmers use `@demo.khetse.test` emails with random, unusable passwords (set
 | `typecheck` / `test` / `test:watch` | type-check src + tests · unit + integration tests |
 | `db:indexes` (`:prod`) | Create/update MongoDB indexes. Run once per deploy (auto-indexing is off in production). |
 | `seed:catalogue` / `seed:demo` | Catalogue · fictional demo farms (dev only) |
+| `seed:algo` / `algo:check` | Durg–Bhilai algorithm test bed (real OpenStreetMap places) and the independent checker of discovery, ranking and checkout against it. See [docs/ALGORITHM_CHECK.md](docs/ALGORITHM_CHECK.md) |
+| `admin:create` (`:prod`) | Create or promote an admin: `ADMIN_PHONE`, `ADMIN_NAME`, `ADMIN_PASSWORD` (≥ 12 chars), optional `ADMIN_EMAIL`. Admins can't sign up in the app. |
+| `workload` | Workload model / load test with customers, farmers and delivery partners together (`setup`, `run --profile peak\|stress\|ramp`, `cleanup`). See [docs/WORKLOAD_MODEL.md](docs/WORKLOAD_MODEL.md) |
+| `seed:activity` | Demo farms plus 6 demo customers and ~40 orders over the last 4 weeks, all placed through the order service (dev only; `-- --reset` removes them) |
 | `bench` / `loadtest` | Query benchmark on a synthetic city-sized dataset · HTTP load test |
 | `reservations:check` (`:prod`) | Compare each listing's reserved stock with open orders; `-- --fix` repairs drift |
 
 ## Testing
 
 ```bash
-npm test     # 96 tests: unit + API integration
+npm test     # 110 tests: unit + API integration
 ```
 
 - **How they run:** the integration tests (`test/`) drive the real Express app (Supertest) against an **in-memory MongoDB replica set**, so checkout exercises real transactions. Each test file gets its own database.
@@ -65,6 +69,7 @@ npm test     # 96 tests: unit + API integration
   - the farmer flow with delivery codes, cancellations and access control;
   - unpaid-order expiry, the farmer acceptance deadline, delivery-code lockout and the reserved-stock audit;
   - sessions: refresh-token rotation, reuse detection, logout everywhere, suspension;
+  - forgot/reset password (single-use links, no account enumeration) and Google sign-in against a mocked Google token endpoint;
   - the full Razorpay flow and payment reconciliation against a mocked Razorpay API.
 - **Test MongoDB binary:** downloaded and cached on first run. To reuse a local `mongod`: `MONGOMS_SYSTEM_BINARY=/usr/bin/mongod npm test`.
 - **CI** (`.github/workflows/ci.yml`) runs typecheck, tests and build, and builds the Docker image.
@@ -83,13 +88,18 @@ docker compose run --rm api node dist/scripts/seed-catalogue.js
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/api/health` | – | DB connectivity check |
-| POST | `/api/auth/register` | – | `{ name, email, phone?, password, role: customer \| farmer }` |
-| POST | `/api/auth/login` | – | Sets a 15-min access cookie and a 30-day refresh cookie (httpOnly, path `/api/auth`); also returns the access `token` |
+| POST | `/api/auth/register` | – | `{ name, phone, email?, password, role: customer \| farmer \| delivery }`. The mobile number is required and unique (any common format: `+91 98765 43210`, `098765…`); email is optional and unique when given. |
+| POST | `/api/auth/login` | – | `{ identifier, password }`, where `identifier` is a mobile number or an email (older clients may send `email`). Sets a 15-min access cookie and a 30-day refresh cookie (httpOnly, path `/api/auth`); also returns the access `token` |
 | POST | `/api/auth/refresh` | refresh cookie | Rotates the refresh token and issues a new access token. A reused token revokes that session family. |
 | POST | `/api/auth/logout` | – | Ends this session on the server and clears cookies |
 | POST | `/api/auth/logout-all` | any | Ends every session of the account → `{ sessionsEnded }` |
+| GET | `/api/auth/providers` | – | `{ google, passwordReset }`: which sign-in options to show |
+| POST | `/api/auth/forgot-password` | – | `{ identifier }` (mobile or email); the link goes to the account's email. Mobile-only accounts can't reset by email until they add one. Same reply whether or not the account exists; emails a single-use link (30 min). 5 per 15 min per IP. |
+| POST | `/api/auth/reset-password` | – | `{ token, password }`. Sets the password and ends every session. |
+| GET | `/api/auth/google?role=customer\|farmer&next=/path` | – | Starts Google sign-in (OAuth code flow + PKCE); ends with a redirect back to the web app, signed in |
+| GET | `/api/auth/google/callback` | Google | Redirect target registered with Google. On failure redirects to `/login?error=<code>` |
 | GET | `/api/auth/me` | any | Current user (cookie or `Authorization: Bearer`) |
-| PATCH | `/api/users/me` | any | Update name / phone |
+| PATCH | `/api/users/me` | any | Update name, mobile number, email (add, change or remove) |
 | GET | `/api/farmers/me` · `/api/farmers/me/overview` | farmer | Own profile + farms · dashboard counts |
 | POST/PUT | `/api/farmers/profile` | farmer | Bio, practices, organic certificate (→ pending review) |
 | GET | `/api/farmers/nearby?lng&lat` | – | Farms that deliver to you; `radiusKm`, `type`, `category`, `maxPrice`, `organic`, `sort=recommended\|distance\|rating`, pagination |
@@ -118,12 +128,49 @@ docker compose run --rm api node dist/scripts/seed-catalogue.js
 | GET | `/api/orders/:id` | owner / farmer in order / admin | Farmers see only their groups and never the delivery code |
 | POST | `/api/orders/:id/cancel` | customer | Pending groups only |
 | POST | `/api/orders/:id/groups/:groupId/code` | customer | New delivery code; unlocks a group locked after 5 wrong codes |
+| POST · DELETE | `/api/orders/:id/groups/:groupId/delivery-partner` | farmer | Hand an accepted/packed group to a delivery partner (it becomes a job on the board) · withdraw the request while nobody has accepted it |
 | POST | `/api/orders/:id/pay` | customer | Start or retry online payment |
 | GET | `/api/orders/farmer?view=incoming\|active\|completed` | farmer | Order queue |
 | PUT | `/api/orders/:id/status` | farmer | `{ groupId, status, note?, code?, deliveryDate? }`. A wrong code returns 400 with tries left; the 5th returns `423 CODE_LOCKED`. |
 | GET | `/api/payments/methods` | anyone | `{ cod: true, online: boolean }` |
 | POST | `/api/payments/razorpay/verify` | customer | Browser callback verification |
 | POST | `/api/payments/razorpay/webhook` | Razorpay | Raw body, `X-Razorpay-Signature` |
+
+### Delivery partners
+
+Register with `role: "delivery"`. A partner sees jobs only after setting a base location and a phone number and going online.
+
+| Method | Path | Who | Notes |
+|---|---|---|---|
+| GET · PUT | `/api/delivery/profile` | delivery | Vehicle, base location, work-area radius (1–30 km), online/offline |
+| GET | `/api/delivery/overview` | delivery | Active and open jobs, today's and this week's earnings, cash collected today |
+| GET | `/api/delivery/jobs/available` | delivery | Open jobs whose farm is within the work area, nearest pickup first (`$geoNear`). Areas and pay only, with no phone numbers or exact addresses. |
+| GET | `/api/delivery/jobs?view=active\|completed` | delivery | The partner's own jobs, with full pickup and drop details |
+| POST | `/api/delivery/jobs/:id/accept` | delivery | Atomic claim: the first partner wins and the rest get `409`. Up to `maxActiveJobs` (3) at a time. |
+| POST | `/api/delivery/jobs/:id/release` | delivery | Give a job back before pickup |
+| POST | `/api/delivery/jobs/:id/pickup` | delivery | Group → out for delivery |
+| POST | `/api/delivery/jobs/:id/deliver` | delivery | `{ code }`, the customer's 4-digit code (same lockout rules as farmers). Group → delivered; COD marked collected. |
+
+### Admin console (role `admin`)
+
+Every change is recorded in an audit trail (`adminactions`) with who, what, when and the reason.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/admin/overview` | People by role, farmers waiting for verification, orders today / 7 days, delivered value (30 days), cash to collect, refunds owed, deliveries without a partner, latest orders |
+| GET | `/api/admin/users?role&status&q` | Search by name, mobile or email |
+| GET | `/api/admin/users/:id` | Role details: a customer's orders and spend; a farmer's farms, listings, sales and verification; a partner's jobs and payouts; admin history |
+| PATCH | `/api/admin/users/:id/status` | `{ status: active \| suspended, reason }`. Suspension ends all sessions; a farmer's produce leaves the marketplace. Admin accounts can't be changed here. |
+| GET | `/api/admin/verification?kind=all\|profile\|organic` | Farmers waiting for review, with farm, listings and certificate details |
+| POST | `/api/admin/farmers/:id/verification` | `{ profile?, organic?: verified \| rejected, note }`. The note is required when rejecting and is shown to the farmer. A rejected profile hides the farmer from the marketplace and checkout. |
+| GET | `/api/admin/orders?status&paymentStatus&paymentMethod&refunds&q&from&to` | Search by order number, name or mobile |
+| GET | `/api/admin/orders/:id` | Order with delivery codes, payments, delivery records and admin history |
+| POST | `/api/admin/orders/:id/groups/:groupId/cancel` | `{ note }`. Cancels one farm's part (stock released; becomes a refund owed if paid online). |
+| POST | `/api/admin/orders/:id/refunds` | `{ amount, reference?, note? }`. Records a refund paid outside the app; never more than is owed. |
+| GET | `/api/admin/payments?provider&status` | Transactions with totals by method and status |
+| GET | `/api/admin/audit` | Audit trail |
+
+Payout per job: ₹20 + ₹6/km of farm-to-customer distance, minimum ₹30 (`config/delivery.ts`). It is paid by Khet Se and independent of the customer's delivery fee.
 
 ## How recommendations work
 

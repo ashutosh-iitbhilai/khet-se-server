@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { limiter } from '../middleware/rateLimit';
 import { z } from 'zod';
 import * as ctrl from '../controllers/order.controller';
+import * as deliveryCtrl from '../controllers/delivery.controller';
+import { groupDeliverySchema } from '../validators/delivery.validator';
 import { asyncHandler } from '../utils/asyncHandler';
 import { validate } from '../middleware/validate';
 import { authenticate, authorize } from '../middleware/auth';
@@ -39,6 +41,9 @@ export const orderRoutes = Router()
   .put('/:id/status', ...farmerOnly, validate(updateStatusSchema), asyncHandler(ctrl.updateStatus))
   .post('/:id/cancel', ...customerOnly, validate(cancelSchema), asyncHandler(ctrl.cancel))
   .post('/:id/groups/:groupId/code', ...customerOnly, validate(groupCodeSchema), asyncHandler(ctrl.newCode))
+  // Farmer hands the delivery to a Khet Se delivery partner (POST) or takes it back (DELETE).
+  .post('/:id/groups/:groupId/delivery-partner', ...farmerOnly, validate(groupDeliverySchema), asyncHandler(deliveryCtrl.requestPartner))
+  .delete('/:id/groups/:groupId/delivery-partner', ...farmerOnly, validate(groupDeliverySchema), asyncHandler(deliveryCtrl.cancelPartnerRequest))
   .post('/:id/pay', ...customerOnly, validate(orderIdSchema), asyncHandler(ctrl.retryPayment));
 
 const verifySchema = z.object({

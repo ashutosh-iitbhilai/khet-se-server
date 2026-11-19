@@ -4,7 +4,7 @@
  */
 import type { GroupStatus, OrderStatus, PaymentMethod, PaymentStatus } from '../../models/Order';
 
-export type Actor = 'customer' | 'farmer' | 'system' | 'admin';
+export type Actor = 'customer' | 'farmer' | 'delivery' | 'system' | 'admin';
 
 /** Allowed transitions: target status → statuses it may come from, per actor. */
 export const TRANSITIONS: Record<Actor, Partial<Record<GroupStatus, GroupStatus[]>>> = {
@@ -15,6 +15,11 @@ export const TRANSITIONS: Record<Actor, Partial<Record<GroupStatus, GroupStatus[
     out_for_delivery: ['accepted', 'packed'],
     delivered: ['out_for_delivery'],
     cancelled: ['accepted', 'packed'],
+  },
+  // A delivery partner picks the parcel up from the farm and hands it over with the customer's code.
+  delivery: {
+    out_for_delivery: ['accepted', 'packed'],
+    delivered: ['out_for_delivery'],
   },
   // Customers can cancel only before the farmer has accepted.
   customer: { cancelled: ['pending'] },

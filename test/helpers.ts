@@ -31,13 +31,18 @@ const uniq = () => `${Date.now().toString(36)}${(seq++).toString(36)}`;
 
 export const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-export async function registerUser(role: 'customer' | 'farmer', overrides: Record<string, unknown> = {}) {
+let phoneSeq = 0;
+/** A unique, valid Indian mobile number for this test run. */
+export const uniquePhone = () => `9${String(process.pid % 100_000).padStart(5, '0')}${String(phoneSeq++).padStart(4, '0')}`;
+
+export async function registerUser(role: 'customer' | 'farmer' | 'delivery', overrides: Record<string, unknown> = {}) {
   const email = `${role}-${uniq()}@test.khetse`;
+  const phone = (overrides.phone as string) || uniquePhone();
   const res = await http()
     .post('/api/auth/register')
-    .send({ name: role === 'farmer' ? 'Test Farmer' : 'Test Customer', email, password: 'pass1234', role, ...overrides });
+    .send({ name: role === 'farmer' ? 'Test Farmer' : role === 'delivery' ? 'Test Rider' : 'Test Customer', email, password: 'pass1234', role, ...overrides, phone });
   if (res.status !== 201) throw new Error(`register failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return { token: res.body.data.token as string, user: res.body.data.user, email };
+  return { token: res.body.data.token as string, user: res.body.data.user, email, phone };
 }
 
 export const RAIPUR = { lng: 81.6296, lat: 21.2514 };
@@ -85,7 +90,7 @@ export async function addListing(token: string, slug: string, opts: Record<strin
 }
 
 export async function createCustomer(at = RAIPUR) {
-  const c = await registerUser('customer', { phone: '' });
+  const c = await registerUser('customer');
   const res = await http()
     .post('/api/addresses')
     .set(auth(c.token))

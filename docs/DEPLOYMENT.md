@@ -53,6 +53,9 @@ If the apps must live on unrelated domains (e.g. `*.vercel.app` + `*.onrender.co
 | `ACCESS_TOKEN_TTL` | `15m`: access-token lifetime. Revocation takes effect within this time. |
 | `REFRESH_TOKEN_TTL_DAYS` | `30`: how long a signed-in device stays signed in without use. |
 | `FARMER_ACCEPT_HOURS` | `24`: unaccepted orders are cancelled and their stock released after this. |
+| `WEB_URL` / `API_PUBLIC_URL` | `https://khetse.in` / `https://api.khetse.in`: used in reset emails and the Google redirect URI |
+| `EMAIL_PROVIDER` / `EMAIL_API_KEY` / `EMAIL_FROM` | `resend` or `brevo`, its API key, and a From address on a domain verified with that provider. With `log`, password-reset emails are **not sent** in production. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional. Google Cloud console → APIs & Services → Credentials → OAuth client ID (Web application). Authorised redirect URI: `https://api.khetse.in/api/auth/google/callback`. Publish the OAuth consent screen (scopes: openid, email, profile). |
 | `ALLOWED_IMAGE_HOSTS` | Comma-separated hosts farmers may paste image links from (default: Cloudinary, Unsplash, Wikimedia). |
 | `CLIENT_ORIGINS` | `https://khetse.in` |
 | `COOKIE_SAMESITE` / `COOKIE_SECURE` | `lax` / `true` (see §2) |

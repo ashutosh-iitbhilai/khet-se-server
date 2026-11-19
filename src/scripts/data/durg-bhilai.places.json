@@ -1,0 +1,231 @@
+{
+ "source": "OpenStreetMap Nominatim via /api/geo/search, looked up 2026-11-19 (© OpenStreetMap contributors, ODbL)",
+ "urban": [
+  {
+   "name": "Bhilai Sector 4",
+   "lat": 21.19526,
+   "lng": 81.34558,
+   "pincode": null,
+   "osm": "Sector 6, Bhilai, Durg Tahsil, Durg, Chhattisgarh, India"
+  },
+  {
+   "name": "Bhilai Sector 7",
+   "lat": 21.19388,
+   "lng": 81.33187,
+   "pincode": null,
+   "osm": "Sector 7, Bhilai, Durg Tahsil, Durg, Chhattisgarh, India"
+  },
+  {
+   "name": "Bhilai Sector 9",
+   "lat": 21.18344,
+   "lng": 81.32092,
+   "pincode": "491002",
+   "osm": "Sector 9, Durg, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "Supela",
+   "lat": 21.21145,
+   "lng": 81.34874,
+   "pincode": "490023",
+   "osm": "SUPELA-KOKHKA ROAD, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490023, India"
+  },
+  {
+   "name": "Nehru Nagar",
+   "lat": 21.2021,
+   "lng": 81.31985,
+   "pincode": "491002",
+   "osm": "Nehru Nagar Talab, Durg, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "Smriti Nagar",
+   "lat": 21.2147,
+   "lng": 81.31924,
+   "pincode": "490020",
+   "osm": "Smriti Nagar Society Admn.Building, Smriti Nagar, Street-7, Durg, Durg Tahsil, Durg, Chhattisgarh, 490020, India"
+  },
+  {
+   "name": "Kohka",
+   "lat": 21.21894,
+   "lng": 81.34622,
+   "pincode": null,
+   "osm": "KRIPAL NAGAR KOHKA BHILAI, Bhilai, Durg Tahsil, Durg, Chhattisgarh, India"
+  },
+  {
+   "name": "Junwani",
+   "lat": 21.21824,
+   "lng": 81.33674,
+   "pincode": "490020",
+   "osm": "Junwani Road, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490020, India"
+  },
+  {
+   "name": "Risali",
+   "lat": 21.15901,
+   "lng": 81.33537,
+   "pincode": "490006",
+   "osm": "JAN AUSHADHI KENDRA ASHISH NAGAR RISALI BHILAI, ASHISH NAGAR, RISALI, Utai Road, Bhilai Sectors, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490006, India"
+  },
+  {
+   "name": "Maroda",
+   "lat": 21.15936,
+   "lng": 81.3596,
+   "pincode": "491002",
+   "osm": "Marauda, Forest Avenue Road, Bhilai Sectors, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "Bhilai-3",
+   "lat": 21.21207,
+   "lng": 81.37328,
+   "pincode": "490023",
+   "osm": "Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490023, India"
+  },
+  {
+   "name": "Power House",
+   "lat": 21.20823,
+   "lng": 81.37581,
+   "pincode": "490023",
+   "osm": "Bhilai Power House, NH53, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490023, India"
+  },
+  {
+   "name": "Khursipar",
+   "lat": 21.20764,
+   "lng": 81.40052,
+   "pincode": "490023",
+   "osm": "New Khursipar Bhilai Police Station, NH53, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490023, India"
+  },
+  {
+   "name": "Kurud",
+   "lat": 21.21835,
+   "lng": 81.3455,
+   "pincode": "490001",
+   "osm": "KOHKA KURUD ROAD, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490001, India"
+  },
+  {
+   "name": "Durg Junction",
+   "lat": 21.20009,
+   "lng": 81.29158,
+   "pincode": "491002",
+   "osm": "Durg Junction, SH7, Durg, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "Kumhari",
+   "lat": 21.25464,
+   "lng": 81.5219,
+   "pincode": "490042",
+   "osm": "Kumhari, Dhamdha Tahsil, Durg, Chhattisgarh, 490042, India"
+  },
+  {
+   "name": "Ahiwara",
+   "lat": 21.36334,
+   "lng": 81.42218,
+   "pincode": "490036",
+   "osm": "Government Hospital Ahiwara, Nandini Road, Nandini Nagar, Dhamdha Tahsil, Durg, Chhattisgarh, 490036, India"
+  },
+  {
+   "name": "Bhilai Nagar",
+   "lat": 21.20118,
+   "lng": 81.33523,
+   "pincode": "491002",
+   "osm": "Bhilai Nagar, Garage Road, Bhilai Sectors, Durg, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "Jamul",
+   "lat": 21.25123,
+   "lng": 81.38939,
+   "pincode": null,
+   "osm": "Jamul, Bhilai, Durg Tahsil, Durg, Chhattisgarh, India"
+  },
+  {
+   "name": "Borsi",
+   "lat": 21.16555,
+   "lng": 81.3097,
+   "pincode": "491002",
+   "osm": "Borsi Market, Utai Road, Bhilai Sectors, Durg, Durg Tahsil, Durg, Chhattisgarh, 491002, India"
+  },
+  {
+   "name": "IIT Bhilai (Kutelabhata)",
+   "lat": 21.24463,
+   "lng": 81.31831,
+   "pincode": "490020",
+   "osm": "Indian Institute of Technology, Bhilai, SH7, Khapri, Durg Tahsil, Durg, Chhattisgarh, 490020, India"
+  },
+  {
+   "name": "Bhilai Sector 1",
+   "lat": 21.20329,
+   "lng": 81.37097,
+   "pincode": null,
+   "osm": "Sector 1, Bhilai, Durg Tahsil, Durg, Chhattisgarh, India"
+  }
+ ],
+ "villages": [
+  {
+   "name": "Utai",
+   "lat": 21.11572,
+   "lng": 81.38794,
+   "pincode": "491107",
+   "osm": "Utai, Durg Tahsil, Durg, Chhattisgarh, 491107, India"
+  },
+  {
+   "name": "Dhamdha",
+   "lat": 21.38568,
+   "lng": 81.33598,
+   "pincode": null,
+   "osm": "Dhamdha Tahsil, Durg, Chhattisgarh, India"
+  },
+  {
+   "name": "Patan",
+   "lat": 21.03923,
+   "lng": 81.54362,
+   "pincode": "491111",
+   "osm": "Patan, Patan Tahsil, Durg, Chhattisgarh, 491111, India"
+  },
+  {
+   "name": "Machandur",
+   "lat": 21.04986,
+   "lng": 81.36056,
+   "pincode": "491221",
+   "osm": "PHC Machandur, Durg Tahsil, Durg, Chhattisgarh, 491221, India"
+  },
+  {
+   "name": "Somni",
+   "lat": 21.14324,
+   "lng": 81.19505,
+   "pincode": null,
+   "osm": "Durg - Raipur - Arang Expressway, Somni, Rajnandgaon Tahsil, Rajnandgaon, Chhattisgarh, India"
+  },
+  {
+   "name": "Murmunda",
+   "lat": 21.30632,
+   "lng": 81.46622,
+   "pincode": "490036",
+   "osm": "PHC Murmunda, Dhamdha Tahsil, Durg, Chhattisgarh, 490036, India"
+  },
+  {
+   "name": "Kachandur",
+   "lat": 20.98003,
+   "lng": 81.29336,
+   "pincode": "491223",
+   "osm": "SubCentre, Kachandur, SH7, Gunderdehi Tahsil, Balod, Chhattisgarh, 491223, India"
+  },
+  {
+   "name": "Khapri",
+   "lat": 21.23567,
+   "lng": 81.3121,
+   "pincode": "490020",
+   "osm": "Khapri, Durg Tahsil, Durg, Chhattisgarh, 490020, India"
+  },
+  {
+   "name": "Jewra Sirsa",
+   "lat": 21.22584,
+   "lng": 81.33743,
+   "pincode": "490020",
+   "osm": "JEVRA SIRSA ROAD, Bhilai, Durg Tahsil, Durg, Chhattisgarh, 490020, India"
+  },
+  {
+   "name": "Jamgaon",
+   "lat": 20.95174,
+   "lng": 81.43549,
+   "pincode": null,
+   "osm": "Jamgaon, Patan Tahsil, Durg, Chhattisgarh, India"
+  }
+ ]
+}

@@ -32,6 +32,21 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
+  // Public URLs: the web app (links in emails, where sign-in lands) and this API (OAuth callback).
+  WEB_URL: z.string().url().optional(),
+  API_PUBLIC_URL: z.string().url().optional(),
+
+  // Transactional email (password reset). "log" prints emails to the server log in
+  // development and drops them in production; "resend" / "brevo" send through their HTTP APIs.
+  EMAIL_PROVIDER: z.enum(['log', 'resend', 'brevo']).default('log'),
+  EMAIL_API_KEY: z.string().optional().default(''),
+  EMAIL_FROM: z.string().default('Khet Se <no-reply@khetse.in>'),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
+
+  // "Continue with Google" (OAuth 2.0 web client). Leave empty to hide the button.
+  GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+
   REDIS_URL: z.string().optional().default(''),
   // Hosts farmers' photo links may point at (comma-separated). Uploads go to Cloudinary.
   ALLOWED_IMAGE_HOSTS: z
@@ -73,7 +88,22 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+export const env = {
+  ...parsed.data,
+  WEB_URL: (parsed.data.WEB_URL ?? parsed.data.CLIENT_ORIGINS[0] ?? 'http://localhost:3000').replace(/\/$/, ''),
+  API_PUBLIC_URL: (parsed.data.API_PUBLIC_URL ?? `http://localhost:${parsed.data.PORT}`).replace(/\/$/, ''),
+};
+export const googleEnabled = () => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
+if (env.EMAIL_PROVIDER !== 'log' && !env.EMAIL_API_KEY) {
+  // eslint-disable-next-line no-console
+  console.error('❌ EMAIL_API_KEY is required when EMAIL_PROVIDER is resend or brevo');
+  process.exit(1);
+}
+if (env.NODE_ENV === 'production' && env.EMAIL_PROVIDER === 'log') {
+  // eslint-disable-next-line no-console
+  console.warn('⚠️  EMAIL_PROVIDER is "log": password-reset emails will not be sent. Set EMAIL_PROVIDER and EMAIL_API_KEY.');
+}
 
 if (env.JWT_EXPIRES_IN) {
   // eslint-disable-next-line no-console

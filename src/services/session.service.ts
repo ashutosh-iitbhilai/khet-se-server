@@ -114,7 +114,7 @@ export async function endSession(token: string | undefined) {
 }
 
 /** Signs a user out everywhere (all devices). Access tokens already issued expire within ACCESS_TOKEN_TTL. */
-export async function endAllSessions(userId: string | Types.ObjectId, reason: 'logout_all' | 'suspended' = 'logout_all') {
+export async function endAllSessions(userId: string | Types.ObjectId, reason: 'logout_all' | 'suspended' | 'password_reset' = 'logout_all') {
   const res = await Session.updateMany({ user: userId, revokedAt: null }, { $set: { revokedAt: new Date(), revokedReason: reason } });
   return res.modifiedCount;
 }

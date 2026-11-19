@@ -1,5 +1,5 @@
 /**
- * Demo marketplace around Raipur, Chhattisgarh — fictional farmers, real coordinates.
+ * Demo marketplace around Raipur and Bhilai–Durg, Chhattisgarh — fictional farmers, real coordinates.
  * Lets you try discovery and recommendations before real farmers join.
  *
  *   npm run seed:demo            # create / refresh demo data
@@ -120,6 +120,48 @@ const FARMS: DemoFarm[] = [
       images: ['/images/site/farm-punjab-harvest.jpg'], description: 'Twelve certified acres.', areaAcres: 12 },
     items: [['tomato', 36, 400, 1], ['potato', 30, 300, 5], ['carrot', 44, 120, 2], ['dried-red-chilli', 85, 60, 40, 'packet', 200]],
   },
+  // ── Bhilai–Durg (≈30 km west of Raipur). Coordinates from OpenStreetMap (see data/durg-bhilai.places.json) ──
+  {
+    key: 'jewra-sirsa', farmer: 'Bhagwati Sahu', phone: '9000000109', years: 14, organic: true, rating: [4.7, 38],
+    bio: 'Family vegetable plot between Bhilai and the IIT campus. Greens picked the morning you order.',
+    practices: ['certified-organic', 'vermicompost', 'drip-irrigation'],
+    farm: { name: 'Jewra Sirsa Organic Bagicha', village: 'Jewra Sirsa', district: 'Durg', pincode: '490020', lng: 81.3374, lat: 21.2258, radiusKm: 15, pickup: true,
+      images: ['/images/site/farm-rows.jpg', '/images/catalogue/spinach.jpg'], description: 'Three acres of greens and tomatoes.', areaAcres: 3 },
+    items: [['spinach', 30, 60, 0], ['coriander', 16, 70, 0], ['tomato', 36, 180, 1], ['okra', 46, 50, 1], ['green-chilli', 68, 25, 1]],
+  },
+  {
+    key: 'anjora', farmer: 'Ghanshyam Verma', phone: '9000000110', years: 20, organic: false, rating: [4.3, 57],
+    bio: 'Staples for Durg and Bhilai households: onions, potatoes, cauliflower and cabbage.',
+    practices: ['crop-rotation', 'drip-irrigation'],
+    farm: { name: 'Anjora Green Fields', village: 'Anjora', district: 'Durg', pincode: '491001', lng: 81.3364, lat: 21.1745, radiusKm: 18, pickup: false,
+      images: ['/images/site/farm-punjab-harvest.jpg'], description: 'Ten acres beside the Shivnath canal.', areaAcres: 10 },
+    items: [['onion', 30, 800, 8], ['potato', 26, 900, 6], ['cauliflower', 34, 90, 1, 'piece'], ['cabbage', 28, 100, 2, 'piece'], ['brinjal', 34, 120, 2]],
+  },
+  {
+    key: 'utai', farmer: 'Rekha Thakur', phone: '9000000111', years: 8, organic: true, rating: [4.8, 26],
+    bio: 'Women’s self-help group drying chillies, tomatoes and methi in the sun. No preservatives.',
+    practices: ['certified-organic', 'no-chemical-pesticides'],
+    farm: { name: 'Utai Sun-Dried Kitchen', village: 'Utai', district: 'Durg', pincode: '491107', lng: 81.3879, lat: 21.1157, radiusKm: 20, pickup: true,
+      images: ['/images/site/farm-guntur-chilli-drying.jpg', '/images/catalogue/sun-dried-tomato.jpg'], description: 'Drying yards and a packing room.', areaAcres: 1 },
+    items: [['dried-red-chilli', 88, 100, 18, 'packet', 200], ['sun-dried-tomato', 135, 50, 12, 'packet', 150], ['kasuri-methi', 58, 120, 20, 'packet', 100],
+      ['dehydrated-vegetable-mix', 115, 40, 9, 'packet', 200]],
+  },
+  {
+    key: 'charoda', farmer: 'Santosh Nishad', phone: '9000000112', years: 11, organic: false, rating: [4.1, 19],
+    bio: 'Beans, peas and carrots grown on the Bhilai–Raipur road.',
+    practices: ['crop-rotation'],
+    farm: { name: 'Charoda Kisan Bagh', village: 'Charoda', district: 'Durg', pincode: '490025', lng: 81.4669, lat: 21.2397, radiusKm: 20, pickup: false,
+      images: ['/images/site/farm-himachal-cabbage.jpg'], description: 'Winter vegetables on four acres.', areaAcres: 4 },
+    items: [['green-peas', 64, 60, 0], ['green-beans', 52, 70, 1], ['carrot', 42, 110, 2], ['garlic', 160, 40, 18], ['tomato', 32, 150, 2]],
+  },
+  {
+    key: 'dhamdha', farmer: 'Lalita Chandrakar', phone: '9000000113', years: 25, organic: true, rating: [4.6, 71],
+    bio: 'Natural farming in Dhamdha for three generations. Known for desi tomatoes and brinjal.',
+    practices: ['natural-farming', 'vermicompost', 'crop-rotation'],
+    farm: { name: 'Dhamdha Desi Sabzi', village: 'Dhamdha', district: 'Durg', pincode: '491331', lng: 81.3360, lat: 21.3857, radiusKm: 25, pickup: false,
+      images: ['/images/site/farm-handshake.jpg', '/images/catalogue/brinjal.jpg'], description: 'Eight certified acres.', areaAcres: 8 },
+    items: [['tomato', 34, 300, 1], ['brinjal', 32, 150, 1], ['spinach', 28, 50, 0], ['potato', 27, 400, 5]],
+  },
 ];
 
 async function reset() {
@@ -221,7 +263,7 @@ async function seed() {
       listings++;
     }
   }
-  logger.info(`Demo data ready: ${FARMS.length} farms, ${listings} listings around Raipur`);
+  logger.info(`Demo data ready: ${FARMS.length} farms, ${listings} listings around Raipur and Bhilai–Durg`);
   if (process.env.DEMO_PASSWORD) logger.info(`Demo farmers can log in as <key>@${DOMAIN} with DEMO_PASSWORD`);
 }
 

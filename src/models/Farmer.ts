@@ -19,8 +19,11 @@ export interface IFarmer {
   experienceYears?: number;
   languages: string[];
   practices: (typeof FARMING_PRACTICES)[number][];
-  /** Identity / profile verification by an admin. */
+  /** Identity / profile verification by an admin. Rejected farmers are hidden from the marketplace. */
   profileStatus: VerificationStatus;
+  /** Admin's note on the last profile decision (shown to the farmer). */
+  profileReviewNote?: string;
+  profileReviewedAt?: Date;
   /** Organic certification claim — verified separately from the profile. */
   organicCertification: {
     status: VerificationStatus;
@@ -29,6 +32,7 @@ export interface IFarmer {
     documentUrl?: string;
     validUntil?: Date;
     reviewNote?: string;
+    reviewedAt?: Date;
   };
   ratingAvg: number;
   ratingCount: number;
@@ -46,6 +50,8 @@ const farmerSchema = new Schema<IFarmer>(
     languages: { type: [String], default: [] },
     practices: { type: [String], enum: FARMING_PRACTICES, default: [] },
     profileStatus: { type: String, enum: VERIFICATION_STATUSES, default: 'pending', index: true },
+    profileReviewNote: { type: String, trim: true, maxlength: 500 },
+    profileReviewedAt: Date,
     organicCertification: {
       status: { type: String, enum: VERIFICATION_STATUSES, default: 'unsubmitted' },
       certificateNumber: { type: String, trim: true, maxlength: 80 },
@@ -53,6 +59,7 @@ const farmerSchema = new Schema<IFarmer>(
       documentUrl: { type: String, trim: true },
       validUntil: Date,
       reviewNote: { type: String, trim: true, maxlength: 500 },
+      reviewedAt: Date,
     },
     ratingAvg: { type: Number, default: 0, min: 0, max: 5 },
     ratingCount: { type: Number, default: 0, min: 0 },

@@ -101,6 +101,8 @@ export async function getOverview(userId: string) {
     profileComplete: Boolean(farmer.bio && farmer.bio.length >= 20),
     organicStatus: farmer.organicCertification.status,
     profileStatus: farmer.profileStatus,
+    profileReviewNote: farmer.profileReviewNote,
+    organicReviewNote: farmer.organicCertification.reviewNote,
     farmCount,
     orders: { pending: pendingOrders, active: activeOrders },
     listings: { total: s.total, active: s.active, outOfStock: s.outOfStock, lowStock: s.lowStock, inactive: s.inactive },

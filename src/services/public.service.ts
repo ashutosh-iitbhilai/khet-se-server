@@ -3,6 +3,8 @@
  * Distances, when a customer location is given, come from MongoDB $geoNear.
  */
 import { Types } from 'mongoose';
+import { isSellable, sellableFilter } from './recommendation/sellable';
+import { activeCatalogue } from './catalogue.cache';
 import { Farm } from '../models/Farm';
 import { Farmer } from '../models/Farmer';
 import { Inventory } from '../models/Inventory';
@@ -39,16 +41,17 @@ const FARMER_FIELDS = 'ratingAvg ratingCount profileStatus experienceYears organ
 
 export async function listingDetail(id: string, at: At) {
   const item = await Inventory.findOne({ _id: id, isActive: true, quantityAvailable: { $gt: 0 } })
-    .populate('product', 'name localName slug image type category description')
+    .populate('product', 'name localName slug image type category description shelfLifeDays')
     .lean();
-  if (!item) throw ApiError.notFound('This product is no longer available');
+  const shelfLifeDays = (item?.product as unknown as { shelfLifeDays?: number } | undefined)?.shelfLifeDays ?? 0;
+  if (!item || !isSellable(item, shelfLifeDays)) throw ApiError.notFound('This product is no longer available');
 
   const [farmer, farms] = await Promise.all([
     Farmer.findById(item.farmer, FARMER_FIELDS).populate<{ user: { name: string; status: string } }>('user', 'name status').lean(),
     farmsOf(item.farmer as Types.ObjectId, at),
   ]);
   const farm = farms.find((f) => String(f._id) === String(item.farm));
-  if (!farm || !farmer || farmer.user?.status !== 'active') throw ApiError.notFound('This product is no longer available');
+  if (!farm || !farmer || farmer.user?.status !== 'active' || farmer.profileStatus === 'rejected') throw ApiError.notFound('This product is no longer available');
 
   const pf = publicFarm(farm);
   const summary = publicFarmerSummary(farmer as unknown as FarmerSource);
@@ -71,7 +74,7 @@ export async function farmerProfile(farmerId: string, at: At) {
   const farmer = await Farmer.findById(farmerId)
     .populate<{ user: { name: string; status: string } }>('user', 'name status')
     .lean();
-  if (!farmer || farmer.user?.status !== 'active') throw ApiError.notFound('Farmer not found');
+  if (!farmer || farmer.user?.status !== 'active' || farmer.profileStatus === 'rejected') throw ApiError.notFound('Farmer not found');
 
   const farms = (await farmsOf(farmer._id, at)).map(publicFarm);
   const farmById = new Map(farms.map((f) => [f.id, f]));
@@ -80,8 +83,7 @@ export async function farmerProfile(farmerId: string, at: At) {
   const rows = await Inventory.find({
     farmer: farmer._id,
     farm: { $in: farms.map((f) => new Types.ObjectId(f.id)) },
-    isActive: true,
-    quantityAvailable: { $gt: 0 },
+    ...sellableFilter(await activeCatalogue()),
   })
     .populate({ path: 'product', select: 'name localName slug image type category', match: { isActive: true } })
     .sort({ productType: -1, productName: 1 })

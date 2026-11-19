@@ -30,25 +30,66 @@ describe('auth', () => {
   });
 
   it('rejects bad input with field details', async () => {
-    const res = await http().post('/api/auth/register').send({ name: 'A', email: 'nope', password: 'short' });
+    const res = await http().post('/api/auth/register').send({ name: 'A', email: 'nope', phone: '12345', password: 'short' });
     expect(res.status).toBe(400);
     const fields = res.body.error.details.map((d: { field: string }) => d.field);
-    expect(fields).toEqual(expect.arrayContaining(['name', 'email', 'password']));
+    expect(fields).toEqual(expect.arrayContaining(['name', 'email', 'phone', 'password']));
+    // A mobile number is required; email is not.
+    const noPhone = await http().post('/api/auth/register').send({ name: 'Asha', email: 'asha@test.khetse', password: 'pass1234' });
+    expect(noPhone.body.error.details.map((d: { field: string }) => d.field)).toEqual(['phone']);
   });
 
   it('does not allow self-registering as admin', async () => {
-    const res = await http().post('/api/auth/register').send({ name: 'Eve', email: 'eve@test.khetse', password: 'pass1234', role: 'admin' });
+    const res = await http().post('/api/auth/register').send({ name: 'Eve', phone: '9123400001', password: 'pass1234', role: 'admin' });
     expect(res.status).toBe(400);
   });
 
-  it('refuses duplicate emails and wrong passwords without revealing which', async () => {
-    const { email } = await registerUser('customer');
-    expect((await http().post('/api/auth/register').send({ name: 'Dup', email, password: 'pass1234' })).status).toBe(409);
+  it('signs up with a mobile number only and logs in with it in any common format', async () => {
+    const reg = await http().post('/api/auth/register').send({ name: 'Mobile Only', phone: '+91 91234-56780', email: '', password: 'pass1234' });
+    expect(reg.status).toBe(201);
+    expect(reg.body.data.user).toMatchObject({ phone: '9123456780', role: 'customer' });
+    expect(reg.body.data.user.email).toBeUndefined();
+    for (const identifier of ['9123456780', '+919123456780', '09123456780', '91234 56780']) {
+      const res = await http().post('/api/auth/login').send({ identifier, password: 'pass1234' });
+      expect(res.status, identifier).toBe(200);
+    }
+    // Two mobile-only accounts don't collide on the missing email.
+    await http().post('/api/auth/register').send({ name: 'Mobile Two', phone: '9123456781', password: 'pass1234' }).expect(201);
+    const bad = await http().post('/api/auth/login').send({ identifier: '12345', password: 'pass1234' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.details[0].field).toBe('identifier');
+  });
+
+  it('logs in with email too, when the account has one', async () => {
+    const { email, phone } = await registerUser('customer');
+    await http().post('/api/auth/login').send({ identifier: email.toUpperCase(), password: 'pass1234' }).expect(200);
+    await http().post('/api/auth/login').send({ email, password: 'pass1234' }).expect(200); // older clients
+    await http().post('/api/auth/login').send({ identifier: phone, password: 'pass1234' }).expect(200);
+  });
+
+  it('refuses duplicate mobile numbers and emails, and wrong passwords without revealing which', async () => {
+    const { email, phone } = await registerUser('customer');
+    const dupPhone = await http().post('/api/auth/register').send({ name: 'Dup', phone: `+91${phone}`, password: 'pass1234' });
+    expect(dupPhone.status).toBe(409);
+    expect(dupPhone.body.error.code).toBe('PHONE_TAKEN');
+    const dupEmail = await http().post('/api/auth/register').send({ name: 'Dup', phone: '9123400002', email, password: 'pass1234' });
+    expect(dupEmail.body.error.code).toBe('EMAIL_TAKEN');
     const wrong = await http().post('/api/auth/login').send({ email, password: 'wrong123' });
     const unknown = await http().post('/api/auth/login').send({ email: 'ghost@test.khetse', password: 'wrong123' });
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
     expect(wrong.body.error.message).toBe(unknown.body.error.message);
+  });
+
+  it('a mobile-only account can add an email later, then log in and reset with it', async () => {
+    const reg = await http().post('/api/auth/register').send({ name: 'Later Email', phone: '9234500001', password: 'pass1234' });
+    const token = reg.body.data.token;
+    const taken = await registerUser('customer');
+    const dup = await http().patch('/api/users/me').set(auth(token)).send({ email: taken.email });
+    expect(dup.status).toBe(409);
+    const ok = await http().patch('/api/users/me').set(auth(token)).send({ email: 'Later@Test.Khetse' });
+    expect(ok.body.data.user.email).toBe('later@test.khetse');
+    await http().post('/api/auth/login').send({ identifier: 'later@test.khetse', password: 'pass1234' }).expect(200);
   });
 
   it('enforces roles', async () => {

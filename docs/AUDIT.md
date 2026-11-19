@@ -23,6 +23,8 @@ Each finding cites the file it was verified in. Severity:
 | **L2** order number collisions | **Fixed** | Placement retries up to 3 times with a new number on a duplicate key. | covered by order tests |
 | Reserved-stock drift | **Added** | `npm run reservations:check` (add `-- --fix` to repair) recomputes `quantityReserved` from open orders. An hourly job reports drift without changing anything. | `orders.test.ts` → "reserved-stock audit" |
 
+**After Phase 2 (product work from M9):** forgot/reset password and "Continue with Google" were added (see README → API). Reset links are single-use, hashed at rest, expire in 30 minutes, never reveal whether an account exists, and end every session. Google sign-in uses the authorization-code flow with PKCE and a signed state cookie; Google accounts are linked to an existing account only when Google reports the email as verified. 14 tests.
+
 **Still open from C1:** money owed (`refundDue > 0`) is recorded and shown to the customer, but no refund is issued through the Razorpay API yet. Someone must refund it from the Razorpay dashboard. Automating this belongs with the admin console (M9).
 
 **Totals after Phase 2:** 96 API tests and 16 web tests, all passing.
@@ -180,4 +182,4 @@ Later phases:
 - **Phase 4:** batches (M6), forecasting, route ordering, H3 cache cells.
 - **Phase 5:** M4, M5 (BullMQ, Pino, request IDs, metrics).
 - **Phase 6:** k6 scenarios, tests and docs.
-- **Separate product work:** M9 (reviews, notifications, admin console, password reset).
+- **Separate product work:** M9 (reviews, notifications, admin console; password reset and Google sign-in are done).

@@ -4,6 +4,7 @@
  * and (strictly) when placing the order — the client's prices are never trusted.
  */
 import { Types } from 'mongoose';
+import { notSellableReason } from '../recommendation/sellable';
 import { Inventory } from '../../models/Inventory';
 import { Farm } from '../../models/Farm';
 import { Farmer } from '../../models/Farmer';
@@ -70,7 +71,7 @@ export async function buildQuote(lines: QuoteLine[], at: { lng: number; lat: num
   const ids = lines.map((l) => new Types.ObjectId(l.listing));
 
   const listings = await Inventory.find({ _id: { $in: ids } })
-    .populate<{ product: { _id: Types.ObjectId; name: string; image: string; isActive: boolean } }>('product', 'name image isActive')
+    .populate<{ product: { _id: Types.ObjectId; name: string; image: string; isActive: boolean; shelfLifeDays: number } }>('product', 'name image isActive shelfLifeDays')
     .lean();
   const byId = new Map(listings.map((l) => [String(l._id), l]));
 
@@ -97,12 +98,19 @@ export async function buildQuote(lines: QuoteLine[], at: { lng: number; lat: num
     const farmer = l ? farmerById.get(String(l.farmer)) : undefined;
     const name = l?.productName ?? 'This product';
 
-    if (!l || !l.isActive || !l.product?.isActive || !farm?.isActive || farmer?.user?.status !== 'active') {
+    if (!l || !l.isActive || !l.product?.isActive || !farm?.isActive || farmer?.user?.status !== 'active' || farmer.profileStatus === 'rejected') {
       issues.push({ listing: line.listing, code: 'UNAVAILABLE', message: `${name} is no longer available` });
       continue;
     }
+    const stale = notSellableReason({ ...l, quantityAvailable: Math.max(l.quantityAvailable, l.minOrderQty) }, l.product.shelfLifeDays);
+    if (stale) {
+      // Expired / past shelf life (stock problems are reported below with the quantity left).
+      issues.push({ listing: line.listing, code: 'UNAVAILABLE', message: `${name} ${stale}` });
+      continue;
+    }
     const distanceKm = Math.round(farm.distance / 100) / 10;
-    if (!farm.deliveryAvailable || distanceKm > farm.deliveryRadiusKm) {
+    // Compare the exact distance, like search does; the rounded figure is only for display and fees.
+    if (!farm.deliveryAvailable || farm.distance > farm.deliveryRadiusKm * 1000) {
       issues.push({
         listing: line.listing,
         code: 'NOT_DELIVERABLE',

@@ -7,3 +7,6 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Load-test sessions and results (tokens for throwaway accounts)
+.loadtest/

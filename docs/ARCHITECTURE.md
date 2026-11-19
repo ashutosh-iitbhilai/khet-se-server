@@ -88,7 +88,8 @@ khet-se/
 | **addresses** | user, label, line1, city, pincode, location: Point, isDefault | `{user}` |
 | **orders** | customer, orderNumber, idempotencyKey, address snapshot, **groups[]** {farmer, farm, items[] (inventory, name, price, qty, unit), subtotal, status, statusHistory[]}, totals, paymentStatus | `orderNumber` unique, `{customer, idempotencyKey}` unique, `groups.farmer` |
 | **payments** | order, provider, providerRef, amount, status | `order`, `providerRef` unique sparse |
-| **deliveries** | order, group, farmer, status, eta, roadDistanceKm | `{order, group}` unique |
+| **deliveries** (one per order group; a *job* when handed to a partner) | order, group, farmer, farm, customer, distanceKm, status (`scheduled`/`requested`/`assigned`/`out_for_delivery`/`delivered`/`cancelled`), mode (`self`/`partner`), partner, **pickupLocation / dropLocation (Points)**, payout, codAmount, timestamps | `{order, group}` unique, **`{pickupLocation: 2dsphere, status}`** (job board), `{partner, status, updatedAt}` |
+| **deliverypartners** | user, vehicle, **baseLocation (Point)**, serviceRadiusKm, isOnline, maxActiveJobs | `user` unique |
 | **reviews** | customer, farmer, product?, order, rating 1–5, comment | `{customer, order, farmer, product}` unique |
 
 **Design notes**
@@ -98,6 +99,7 @@ khet-se/
 - *Idempotency:* the client sends an `Idempotency-Key` with checkout; the unique index rejects duplicate orders.
 - *Unbounded data is never embedded:* products, orders and reviews live in their own collections, referenced by id.
 - *Order groups:* one customer order may span several farmers; each `group` is fulfilled independently with its own status.
+- *Delivery partners:* a farmer can hand an accepted group to a partner. The delivery record becomes a job; online partners whose base is within their work area see it (`$geoNear` on `pickupLocation`). Accepting is one conditional update (`{status: 'requested', partner: null}`), so the first partner wins. The group then carries a `courier` snapshot (name, phone, vehicle) that customers and farmers see. Pickup and handover go through the same order state machine as farmer deliveries, with actor `delivery`, so stock, COD and the code lockout behave identically.
 
 ---
 
@@ -114,7 +116,8 @@ Responses: `{ success, data, meta? }` or `{ success: false, error: { code, messa
 | Inventory | `GET /api/inventory?near…&product&type&maxPrice&organic` · `GET /api/inventory/mine` · `POST /api/inventory` · `PUT /api/inventory/:id` | public / farmer |
 | Recommendations | `GET /api/recommendations/farmers?lng&lat` · `GET /api/recommendations/products?lng&lat` | public |
 | Addresses | `GET/POST /api/addresses` · `PUT/DELETE /api/addresses/:id` | customer |
-| Orders | `POST /api/orders` · `GET /api/orders/my-orders` · `GET /api/orders/farmer` · `GET /api/orders/:id` · `PUT /api/orders/:id/status` | customer / farmer |
+| Orders | `POST /api/orders` · `GET /api/orders/my-orders` · `GET /api/orders/farmer` · `GET /api/orders/:id` · `PUT /api/orders/:id/status` · `POST/DELETE /api/orders/:id/groups/:groupId/delivery-partner` | customer / farmer |
+| Delivery partners | `GET/PUT /api/delivery/profile` · `GET /api/delivery/overview` · `GET /api/delivery/jobs/available` · `GET /api/delivery/jobs` · `POST /api/delivery/jobs/:id/{accept,release,pickup,deliver}` | delivery |
 | Reviews | `POST /api/reviews` · `GET /api/reviews?farmer&product` | customer / public |
 | Uploads | `POST /api/uploads/sign` (Cloudinary signed upload) | farmer/admin |
 | Admin | `GET /api/admin/stats` · `GET /api/admin/users` · `PATCH /api/admin/farmers/:id/verify` · `GET /api/admin/orders` | admin |

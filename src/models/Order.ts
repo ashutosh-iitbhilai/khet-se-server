@@ -42,8 +42,20 @@ export interface IOrderItem {
 export interface IStatusEvent {
   status: GroupStatus;
   at: Date;
-  by: 'customer' | 'farmer' | 'system' | 'admin';
+  by: 'customer' | 'farmer' | 'delivery' | 'system' | 'admin';
   note?: string;
+}
+
+/** Who carries a group to the customer: the farmer themself, or a Khet Se delivery partner. */
+export const DELIVERY_MODES = ['self', 'partner'] as const;
+export type DeliveryMode = (typeof DELIVERY_MODES)[number];
+
+/** Snapshot of the assigned delivery partner, shown to the customer and the farmer. */
+export interface ICourier {
+  partner: Types.ObjectId;
+  name: string;
+  phone?: string;
+  vehicle: string;
 }
 
 export interface IOrderGroup {
@@ -71,6 +83,8 @@ export interface IOrderGroup {
   scheduledFor?: Date;
   paymentCollected: boolean;
   cancelReason?: string;
+  deliveryMode: DeliveryMode;
+  courier?: ICourier;
 }
 
 export interface IOrder {
@@ -93,6 +107,8 @@ export interface IOrder {
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   refundDue: number;
+  /** Refunds paid outside the app (e.g. from the Razorpay dashboard), recorded by an admin. */
+  refundsSettled?: { amount: number; reference?: string; note?: string; at: Date; by: Types.ObjectId }[];
   reservationExpiresAt?: Date | null;
   status: OrderStatus;
   createdAt: Date;
@@ -120,7 +136,7 @@ const eventSchema = new Schema<IStatusEvent>(
   {
     status: { type: String, enum: GROUP_STATUSES, required: true },
     at: { type: Date, required: true },
-    by: { type: String, enum: ['customer', 'farmer', 'system', 'admin'], required: true },
+    by: { type: String, enum: ['customer', 'farmer', 'delivery', 'system', 'admin'], required: true },
     note: { type: String, maxlength: 300 },
   },
   { _id: false },
@@ -146,6 +162,19 @@ const groupSchema = new Schema<IOrderGroup>({
   scheduledFor: Date,
   paymentCollected: { type: Boolean, default: false },
   cancelReason: { type: String, maxlength: 300 },
+  deliveryMode: { type: String, enum: DELIVERY_MODES, default: 'self' },
+  courier: {
+    type: new Schema<ICourier>(
+      {
+        partner: { type: Schema.Types.ObjectId, ref: 'DeliveryPartner', required: true },
+        name: { type: String, required: true },
+        phone: String,
+        vehicle: { type: String, required: true },
+      },
+      { _id: false },
+    ),
+    default: undefined,
+  },
 });
 
 const orderSchema = new Schema<IOrder>(
@@ -169,6 +198,21 @@ const orderSchema = new Schema<IOrder>(
     paymentMethod: { type: String, enum: PAYMENT_METHODS, required: true },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, required: true },
     refundDue: { type: Number, default: 0 },
+    refundsSettled: {
+      type: [
+        new Schema(
+          {
+            amount: { type: Number, required: true, min: 0.01 },
+            reference: { type: String, trim: true, maxlength: 100 },
+            note: { type: String, trim: true, maxlength: 300 },
+            at: { type: Date, required: true },
+            by: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+    },
     reservationExpiresAt: Date,
     status: { type: String, enum: ORDER_STATUSES, default: 'placed' },
   },

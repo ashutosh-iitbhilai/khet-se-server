@@ -13,7 +13,15 @@ export async function updateMe(userId: string, input: UpdateMeInput) {
     ]);
   }
 
+  if (input.email && input.email !== user.email && (await User.exists({ email: input.email, _id: { $ne: user._id } }))) {
+    throw ApiError.conflict('This email is already used by another account', [{ field: 'email', message: 'Already in use' }]);
+  }
+  if (input.email !== undefined && !input.email && !(input.phone ?? user.phone)) {
+    throw ApiError.badRequest('Keep an email or a mobile number so you can log in', [{ field: 'email', message: 'Required' }]);
+  }
+
   if (input.name !== undefined) user.name = input.name;
+  if (input.email !== undefined) user.email = input.email || undefined;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   await user.save();
   return user;
