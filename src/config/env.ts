@@ -10,6 +10,8 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(5000),
+  // Address to listen on. 127.0.0.1 keeps the API private when the web server proxies it.
+  HOST: z.string().default('0.0.0.0'),
   CLIENT_ORIGINS: z
     .string()
     .default('http://localhost:3000')

@@ -11,8 +11,8 @@ async function bootstrap() {
 
   startJobs();
   const app = createApp();
-  const server = app.listen(env.PORT, () => {
-    logger.info(`Khet Se API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  const server = app.listen(env.PORT, env.HOST, () => {
+    logger.info(`Khet Se API listening on http://${env.HOST}:${env.PORT} (${env.NODE_ENV})`);
   });
 
   // Graceful shutdown so in-flight requests finish during deploys / scaling events.
