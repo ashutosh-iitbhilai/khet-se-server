@@ -39,6 +39,10 @@ npm run seed:demo -- --reset    # remove them again
 
 Demo farmers use `@demo.khetse.test` emails with random, unusable passwords (set `DEMO_PASSWORD` before seeding to log in as them). Their star ratings are placeholders, not real reviews. Never run `seed:demo` in production.
 
+## System design report
+
+[docs/report/khet_se_report.pdf](docs/report/khet_se_report.pdf) (LaTeX source alongside): requirements, architecture, algorithms, functionality with screenshots, and evaluation.
+
 ## Scripts
 
 | Script | Purpose |
