@@ -50,7 +50,10 @@ If the apps must live on unrelated domains (e.g. `*.vercel.app` + `*.onrender.co
 | `PORT` | `5000` (or what your host injects) |
 | `MONGODB_URI` | Atlas SRV URI with a database name, e.g. `mongodb+srv://…/khet-se?retryWrites=true&w=majority` |
 | `JWT_SECRET` | **required** — `openssl rand -hex 48`. Changing it signs everyone out. |
-| `JWT_EXPIRES_IN` | `7d` |
+| `ACCESS_TOKEN_TTL` | `15m`: access-token lifetime. Revocation takes effect within this time. |
+| `REFRESH_TOKEN_TTL_DAYS` | `30`: how long a signed-in device stays signed in without use. |
+| `FARMER_ACCEPT_HOURS` | `24`: unaccepted orders are cancelled and their stock released after this. |
+| `ALLOWED_IMAGE_HOSTS` | Comma-separated hosts farmers may paste image links from (default: Cloudinary, Unsplash, Wikimedia). |
 | `CLIENT_ORIGINS` | `https://khetse.in` |
 | `COOKIE_SAMESITE` / `COOKIE_SECURE` | `lax` / `true` (see §2) |
 | `MONGO_AUTO_INDEX` | leave unset (off in production; use `db:indexes`) |
@@ -131,7 +134,8 @@ This starts MongoDB 7 as a single-node replica set (initialised by its health ch
 ## 7. Known gaps before a public launch
 
 - **Online payments:** tested only against a mocked Razorpay API (integration tests); not yet against real Razorpay test mode.
-- **Refunds** are recorded as "refund due" but not sent to Razorpay automatically.
+- **Refunds** are recorded as "refund due" but not sent to Razorpay automatically. Refund them from the Razorpay dashboard.
+- **Upload size** is limited only in the browser (8 MB). Add a Cloudinary upload preset with a maximum file size.
 - **Not built yet:**
   - Farm pickup at checkout (delivery only).
   - SMS / email notifications.

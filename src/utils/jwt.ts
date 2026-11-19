@@ -5,11 +5,14 @@ import type { UserRole } from '../models/User';
 export interface JwtPayload {
   sub: string; // user id
   role: UserRole;
+  /** Session id (refresh-token family member) this access token was issued for. */
+  sid?: string;
 }
 
+/** Short-lived access token. Revocation happens at refresh time (see session.service). */
 export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN as SignOptions['expiresIn'],
+    expiresIn: env.ACCESS_TOKEN_TTL as SignOptions['expiresIn'],
   });
 }
 

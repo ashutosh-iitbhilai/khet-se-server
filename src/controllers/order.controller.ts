@@ -53,6 +53,11 @@ export async function updateStatus(req: Request, res: Response) {
   res.json({ success: true, data: { order: await orderService.farmerUpdateStatus(req.auth!.userId, req.params.id, req.body) } });
 }
 
+export async function newCode(req: Request, res: Response) {
+  const order = await orderService.regenerateHandoverCode(req.auth!.userId, req.params.id, req.params.groupId);
+  res.json({ success: true, data: { order } });
+}
+
 export async function cancel(req: Request, res: Response) {
   const order = await orderService.customerCancel(req.auth!.userId, req.params.id, req.body.groupId, req.body.reason);
   res.json({ success: true, data: { order } });

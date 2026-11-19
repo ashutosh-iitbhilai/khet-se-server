@@ -55,6 +55,8 @@ export const updateStatusSchema = z.object({
   }),
 });
 
+export const groupCodeSchema = z.object({ params: z.object({ id: objectId, groupId: objectId }) });
+
 export const cancelSchema = z.object({
   params: idParams,
   body: z.object({ groupId: objectId.optional(), reason: z.string().trim().max(300).optional() }),

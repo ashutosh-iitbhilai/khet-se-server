@@ -24,6 +24,8 @@ export function signUpload(kind: UploadKind, userId: string) {
     timestamp,
     // Resize on upload so oversized phone photos never reach storage.
     transformation: 'c_limit,w_2000,h_2000,q_auto:good',
+    // Signed, so the browser can't change them: Cloudinary rejects anything that isn't one of these.
+    allowed_formats: 'jpg,jpeg,png,webp',
   };
 
   const toSign = Object.keys(params)

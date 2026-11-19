@@ -1,22 +1,15 @@
 import bcrypt from 'bcryptjs';
 import { User, type UserDocument } from '../models/User';
 import { ApiError } from '../utils/ApiError';
-import { signToken } from '../utils/jwt';
 import { ensureFarmerForUser } from './farmer.service';
+import { startSession, type IssuedTokens, type SessionMeta } from './session.service';
 import type { LoginInput, RegisterInput } from '../validators/auth.validator';
 
 const BCRYPT_ROUNDS = 12;
 
-export interface AuthResult {
-  user: UserDocument;
-  token: string;
-}
+export type AuthResult = IssuedTokens;
 
-function issue(user: UserDocument): AuthResult {
-  return { user, token: signToken({ sub: user.id, role: user.role }) };
-}
-
-export async function register(input: RegisterInput): Promise<AuthResult> {
+export async function register(input: RegisterInput, meta: SessionMeta = {}): Promise<AuthResult> {
   const existing = await User.exists({ email: input.email });
   if (existing) throw ApiError.conflict('An account with this email already exists');
 
@@ -36,10 +29,10 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
   // Farmers get an (empty) profile immediately so the dashboard can guide onboarding.
   if (user.role === 'farmer') await ensureFarmerForUser(user._id);
 
-  return issue(user);
+  return startSession(user, meta);
 }
 
-export async function login(input: LoginInput): Promise<AuthResult> {
+export async function login(input: LoginInput, meta: SessionMeta = {}): Promise<AuthResult> {
   const user = await User.findOne({ email: input.email }).select('+passwordHash');
 
   // Same message for unknown email and wrong password — don't leak which accounts exist.
@@ -52,7 +45,7 @@ export async function login(input: LoginInput): Promise<AuthResult> {
 
   user.lastLoginAt = new Date();
   await user.save();
-  return issue(user);
+  return startSession(user, meta);
 }
 
 export async function getById(id: string): Promise<UserDocument> {

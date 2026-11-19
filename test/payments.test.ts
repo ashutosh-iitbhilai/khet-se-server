@@ -15,6 +15,8 @@ const h = await import('./helpers');
 const { Order } = await import('../src/models/Order');
 const { Payment } = await import('../src/models/Payment');
 const { expireUnpaidOrders } = await import('../src/services/order/order.service');
+const { reconcilePendingPayments } = await import('../src/services/payments/payment.service');
+const { Inventory } = await import('../src/models/Inventory');
 
 h.useDatabase();
 
@@ -22,9 +24,19 @@ h.useDatabase();
 const realFetch = globalThis.fetch;
 let rzpCounter = 0;
 let rzpDown = false;
+/** Payments Razorpay "knows about" per Razorpay order id (what the reconciliation call returns). */
+const rzpCaptured = new Map<string, string>();
 beforeAll(() => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
+    const paymentsOf = /^https:\/\/api\.razorpay\.com\/v1\/orders\/([^/]+)\/payments$/.exec(url);
+    if (paymentsOf) {
+      if (rzpDown) return new Response('{"error":{}}', { status: 503 });
+      const id = decodeURIComponent(paymentsOf[1]);
+      const pay = rzpCaptured.get(id);
+      const items = pay ? [{ id: pay, order_id: id, status: 'captured', amount: 100 }] : [];
+      return new Response(JSON.stringify({ entity: 'collection', count: items.length, items }), { status: 200 });
+    }
     if (url === 'https://api.razorpay.com/v1/orders') {
       if (rzpDown) return new Response('{"error":{}}', { status: 500 });
       const body = JSON.parse(String(init?.body));
@@ -124,5 +136,67 @@ describe('online payments', () => {
     expect(res.status).toBe(502);
     const after = (await (await import('../src/models/Inventory')).Inventory.findById(listing).lean())!.quantityAvailable;
     expect(after).toBe(before);
+  });
+});
+
+describe('payment reconciliation (no callback, no webhook)', () => {
+  const available = async () => (await Inventory.findById(listing).lean())!.quantityAvailable;
+  const expire = (id: string) => Order.updateOne({ _id: id }, { $set: { reservationExpiresAt: new Date(Date.now() - 1000) } });
+
+  it('a customer who paid but whose callback and webhook never arrived is not cancelled', async () => {
+    const { order, payment } = await startOnlineOrder();
+    rzpCaptured.set(payment.razorpayOrderId, 'pay_SILENT1'); // money captured; we were never told
+    await expire(order.id);
+
+    const r = await expireUnpaidOrders();
+    expect(r.recovered).toBe(1);
+    const o = await Order.findById(order.id);
+    expect(o!.paymentStatus).toBe('paid');
+    expect(o!.status).toBe('placed');
+    expect(o!.groups[0].status).toBe('pending');
+    // Farmers now get their acceptance window, counted from the payment.
+    expect(o!.groups[0].acceptBy!.getTime()).toBeGreaterThan(Date.now() + 23 * 3600_000);
+    expect((await Payment.findOne({ providerOrderId: payment.razorpayOrderId }))!.providerPaymentId).toBe('pay_SILENT1');
+  });
+
+  it('when Razorpay is unreachable, stock stays held through the grace period, then the order is cancelled', async () => {
+    const { order } = await startOnlineOrder();
+    const held = await available();
+    await expire(order.id);
+
+    rzpDown = true;
+    let r = await expireUnpaidOrders();
+    expect(r.deferred).toBe(1);
+    expect(await available()).toBe(held); // still reserved
+    expect((await Order.findById(order.id))!.status).toBe('placed');
+
+    // Past the grace period: cancel anyway (the reconciliation sweep will catch a late payment).
+    await Order.updateOne({ _id: order.id }, { $set: { reservationExpiresAt: new Date(Date.now() - 31 * 60_000) } });
+    r = await expireUnpaidOrders();
+    rzpDown = false;
+    expect(r.groupsCancelled).toBe(1);
+    expect(await available()).toBe(held + 2);
+  });
+
+  it('the sweep turns a payment captured after cancellation into a refund due', async () => {
+    const { order, payment } = await startOnlineOrder();
+    await expire(order.id);
+    rzpDown = true; // checks fail during expiry…
+    await Order.updateOne({ _id: order.id }, { $set: { reservationExpiresAt: new Date(Date.now() - 31 * 60_000) } });
+    await expireUnpaidOrders();
+    rzpDown = false;
+    expect((await Order.findById(order.id))!.status).toBe('cancelled');
+
+    rzpCaptured.set(payment.razorpayOrderId, 'pay_LATE2'); // …and the money shows up later
+    // Back-date the attempt past the sweep's 2-minute settle time (createdAt is immutable in Mongoose).
+    await Payment.collection.updateOne({ providerOrderId: payment.razorpayOrderId }, { $set: { createdAt: new Date(Date.now() - 10 * 60_000) } });
+    const r = await reconcilePendingPayments();
+    expect(r.recovered).toBeGreaterThanOrEqual(1);
+    const o = await Order.findById(order.id);
+    expect(o!.paymentStatus).toBe('refund_pending');
+    expect(o!.refundDue).toBe(order.grandTotal);
+    // Running the sweep again changes nothing (each payment is recorded once).
+    await reconcilePendingPayments();
+    expect(await Payment.countDocuments({ order: order.id, status: 'paid' })).toBe(1);
   });
 });

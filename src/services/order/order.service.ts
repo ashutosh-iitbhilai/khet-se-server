@@ -4,14 +4,15 @@ import { Order, type GroupStatus, type IOrder, type OrderDocument, type PaymentM
 import { Address } from '../../models/Address';
 import { Delivery } from '../../models/Delivery';
 import { User } from '../../models/User';
-import { ORDERS } from '../../config/orders';
+import { ORDERS, acceptDeadline } from '../../config/orders';
 import { invalidateRecommendations } from '../../config/cache';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
 import { pageMeta, skipFor } from '../../utils/pagination';
 import { withTransaction } from '../../utils/transaction';
 import { requireFarmer } from '../farmer.service';
-import { recordCod, syncCodRecord } from '../payments/payment.service';
+import { reconcileOrder, recordCod, syncCodRecord } from '../payments/payment.service';
+import { razorpayEnabled } from '../payments/razorpay';
 import { buildQuote, publicQuote } from './quote.service';
 import { consumeStock, releaseStock, reserveStock, type StockLine } from './stock.service';
 import { allowedFrom, deriveOrderStatus, derivePayment, stockEffect, type Actor } from './rules';
@@ -51,7 +52,7 @@ export function forFarmer(o: OrderDocument, farmerId: string) {
     groups: o.groups
       .filter((g) => String(g.farmer) === farmerId)
       .map((g) => {
-        const { handoverCode: _code, ...rest } = g.toJSON() as unknown as Record<string, unknown>;
+        const { handoverCode: _code, codeAttempts: _attempts, ...rest } = g.toJSON() as unknown as Record<string, unknown>;
         return { ...rest, id: String(g._id), status: g.status };
       }),
   };
@@ -113,6 +114,10 @@ export async function placeOrder(customerId: string, idempotencyKey: string, inp
       status: 'pending',
       history: [{ status: 'pending', at: new Date(), by: 'customer' }],
       handoverCode: handoverCode(),
+      codeAttempts: 0,
+      codeLocked: false,
+      // COD orders reach farmers immediately; online ones get a deadline once paid (markPaid).
+      acceptBy: paymentMethod === 'cod' ? acceptDeadline() : undefined,
       paymentCollected: false,
     })) as unknown as IOrder['groups'],
     itemsTotal: q.itemsTotal,
@@ -125,8 +130,8 @@ export async function placeOrder(customerId: string, idempotencyKey: string, inp
   };
   const stock = q.groups.flatMap((g) => linesOf(g.items));
 
-  try {
-    const order = await withTransaction(async (session) => {
+  const create = () =>
+    withTransaction(async (session) => {
       await reserveStock(stock, session);
       try {
         const [created] = await Order.create([doc], { session });
@@ -136,13 +141,31 @@ export async function placeOrder(customerId: string, idempotencyKey: string, inp
         throw err;
       }
     });
+  const isDuplicate = (err: unknown, field: string) =>
+    (err as { code?: number }).code === 11000 && String((err as Error).message).includes(field);
+
+  try {
+    let order;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        order = await create();
+        break;
+      } catch (err) {
+        // A random order number collided (rare): the attempt was rolled back, try a new number.
+        if (attempt < 3 && isDuplicate(err, 'orderNumber')) {
+          doc.orderNumber = orderNumber();
+          continue;
+        }
+        throw err;
+      }
+    }
     if (paymentMethod === 'cod') await recordCod(order);
     void invalidateRecommendations();
     logger.info(`Order ${order.orderNumber} placed (${paymentMethod}, ₹${order.grandTotal}, ${order.groups.length} farm(s))`);
     return { order, replayed: false };
   } catch (err) {
     // Two identical requests raced: the loser returns the winner's order.
-    if ((err as { code?: number }).code === 11000 && String((err as Error).message).includes('idempotencyKey')) {
+    if (isDuplicate(err, 'idempotencyKey')) {
       const winner = await Order.findOne({ customer: customerId, idempotencyKey });
       if (winner) return { order: winner, replayed: true };
     }
@@ -213,6 +236,49 @@ interface TransitionOptions {
   deliveryDate?: Date;
 }
 
+const CODE_LOCKED_MESSAGE =
+  'Too many wrong codes. Ask the customer to get a new delivery code from their order page.';
+
+/**
+ * Verifies the customer's handover code. Wrong attempts are counted atomically; after
+ * ORDERS.maxCodeAttempts the code locks, so a 4-digit code can't be guessed by trying them all.
+ */
+async function checkHandoverCode(orderId: string, groupId: string, group: OrderDocument['groups'][number], code: string) {
+  if (group.codeLocked) throw new ApiError(423, 'CODE_LOCKED', CODE_LOCKED_MESSAGE);
+  if (code === group.handoverCode) return;
+
+  const updated = await Order.findOneAndUpdate(
+    { _id: orderId, groups: { $elemMatch: { _id: groupId, codeLocked: { $ne: true } } } },
+    { $inc: { 'groups.$.codeAttempts': 1 } },
+    { new: true },
+  );
+  const attempts = updated?.groups.id(groupId)?.codeAttempts ?? ORDERS.maxCodeAttempts;
+  if (attempts >= ORDERS.maxCodeAttempts) {
+    await Order.updateOne({ _id: orderId, 'groups._id': groupId }, { $set: { 'groups.$.codeLocked': true } });
+    logger.warn(`Delivery code locked after ${attempts} wrong attempts: order ${orderId}, group ${groupId}`);
+    throw new ApiError(423, 'CODE_LOCKED', CODE_LOCKED_MESSAGE);
+  }
+  const left = ORDERS.maxCodeAttempts - attempts;
+  throw ApiError.badRequest(`That delivery code is not correct. ${left} ${left === 1 ? 'try' : 'tries'} left.`, [
+    { field: 'code', message: 'Incorrect code' },
+  ]);
+}
+
+/** Customer issues a fresh delivery code for one of their groups (e.g. after it locked). */
+export async function regenerateHandoverCode(customerId: string, orderId: string, groupId: string) {
+  const res = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      customer: customerId,
+      groups: { $elemMatch: { _id: groupId, status: { $in: ['pending', 'accepted', 'packed', 'out_for_delivery'] } } },
+    },
+    { $set: { 'groups.$.handoverCode': handoverCode(), 'groups.$.codeAttempts': 0, 'groups.$.codeLocked': false } },
+    { new: true },
+  );
+  if (!res) throw ApiError.notFound('Order not found, or it is already delivered or cancelled');
+  return forCustomer(res);
+}
+
 /** Re-derives order status and payment status from groups and saves them. */
 async function syncDerived(order: OrderDocument, session: ClientSession | undefined) {
   const status = deriveOrderStatus(order.groups.map((g) => g.status));
@@ -248,9 +314,7 @@ export async function transitionGroup(orderId: string, groupId: string, to: Grou
   }
   if (to === 'delivered' && opts.actor === 'farmer') {
     if (!opts.code) throw ApiError.badRequest('Ask the customer for their 4-digit delivery code', [{ field: 'code', message: 'Required' }]);
-    if (opts.code !== group.handoverCode) {
-      throw ApiError.badRequest('That delivery code is not correct', [{ field: 'code', message: 'Incorrect code' }]);
-    }
+    await checkHandoverCode(orderId, groupId, group, opts.code);
   }
 
   const now = new Date();
@@ -333,7 +397,26 @@ export async function customerCancel(userId: string, orderId: string, groupId?: 
 export async function expireUnpaidOrders(now = new Date()) {
   const expired = await Order.find({ paymentStatus: 'pending', reservationExpiresAt: { $lte: now } }).limit(100);
   let cancelled = 0;
+  let recovered = 0;
+  let deferred = 0;
   for (const o of expired) {
+    // Never cancel an order the customer may have paid for without asking Razorpay first:
+    // the browser callback and webhook can both fail to arrive.
+    if (o.paymentMethod === 'online' && razorpayEnabled()) {
+      try {
+        if ((await reconcileOrder(o._id)) === 'paid') {
+          recovered++;
+          continue;
+        }
+      } catch (err) {
+        const graceEnds = (o.reservationExpiresAt?.getTime() ?? 0) + ORDERS.expiryGraceMinutes * 60_000;
+        if (now.getTime() < graceEnds) {
+          deferred++; // Razorpay unreachable: keep the stock held and try again next run
+          continue;
+        }
+        logger.warn(`Cancelling ${o.orderNumber} without a payment check (Razorpay unreachable): ${(err as Error).message}`);
+      }
+    }
     for (const g of o.groups.filter((x) => x.status === 'pending')) {
       try {
         await transitionGroup(String(o._id), String(g._id), 'cancelled', { actor: 'system', note: 'Payment not completed in time' });
@@ -344,7 +427,34 @@ export async function expireUnpaidOrders(now = new Date()) {
       }
     }
   }
-  return { orders: expired.length, groupsCancelled: cancelled };
+  return { orders: expired.length, groupsCancelled: cancelled, recovered, deferred };
+}
+
+/**
+ * Background job: cancel groups a farmer never accepted or declined in time, releasing the
+ * stock they held. Unpaid online orders are left to `expireUnpaidOrders`.
+ */
+export async function expireUnacceptedGroups(now = new Date()) {
+  const late = await Order.find({
+    groups: { $elemMatch: { status: 'pending', acceptBy: { $lte: now } } },
+    paymentStatus: { $ne: 'pending' },
+  }).limit(100);
+  let cancelled = 0;
+  for (const o of late) {
+    for (const g of o.groups.filter((x) => x.status === 'pending' && x.acceptBy && x.acceptBy <= now)) {
+      try {
+        await transitionGroup(String(o._id), String(g._id), 'cancelled', {
+          actor: 'system',
+          note: 'The farmer did not confirm this order in time',
+        });
+        cancelled++;
+      } catch (err) {
+        // The farmer accepted or declined at the same moment — that's fine.
+        if (!(err instanceof ApiError && err.statusCode === 409)) logger.warn(`Acceptance expiry failed for ${o.orderNumber}`, err);
+      }
+    }
+  }
+  return { orders: late.length, groupsCancelled: cancelled };
 }
 
 export async function pendingCountForFarmer(farmerId: Types.ObjectId) {

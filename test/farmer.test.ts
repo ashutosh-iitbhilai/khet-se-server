@@ -106,3 +106,17 @@ describe('public farmer profile', () => {
     for (const secret of ['passwordHash', 'quantityReserved', 'line1', 'pincode', 'phone']) expect(raw).not.toContain(secret);
   });
 });
+
+describe('photo links', () => {
+  it('only accepts photos from approved image hosts or self-hosted paths', async () => {
+    const { token, farmId } = await createFarm();
+    const put = (images: string[]) => http().put(`/api/farms/${farmId}`).set(auth(token)).send({ images });
+    const bad = await put(['https://tracker.example.com/pixel.jpg']);
+    expect(bad.status).toBe(400);
+    expect(JSON.stringify(bad.body.error)).toContain('res.cloudinary.com');
+    expect((await put(['http://res.cloudinary.com/demo/image/upload/a.jpg'])).status).toBe(400); // https only
+    expect((await put(['https://res.cloudinary.com/demo/image/upload/a.jpg', '/images/site/farm-rows.jpg'])).status).toBe(200);
+    // Listings are checked the same way.
+    await expect(addListing(token, 'okra', { images: ['https://evil.example.org/x.png'] })).rejects.toThrow(/400/);
+  });
+});

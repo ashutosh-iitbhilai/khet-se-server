@@ -4,7 +4,7 @@ import { Order } from '../src/models/Order';
 import { Payment } from '../src/models/Payment';
 import { Delivery } from '../src/models/Delivery';
 import { transactionsSupported } from '../src/config/db';
-import { expireUnpaidOrders, placeOrder as placeOrderService } from '../src/services/order/order.service';
+import { expireUnacceptedGroups, expireUnpaidOrders, placeOrder as placeOrderService } from '../src/services/order/order.service';
 import { buildQuote } from '../src/services/order/quote.service';
 import { RAIPUR, addListing, auth, createCustomer, createFarm, eastKm, http, placeOrder, quote, useDatabase } from './helpers';
 
@@ -203,5 +203,101 @@ describe('unpaid online orders', () => {
     const res = await placeOrder(c.token, c.addressId, [{ listing: tomato, quantity: 1 }], { paymentMethod: 'online' });
     expect(res.status).toBe(400);
     expect(await stock(tomato)).toEqual(before);
+  });
+});
+
+describe('farmer acceptance deadline', () => {
+  it('COD groups get a deadline; unanswered groups are cancelled and their stock released', async () => {
+    const c = await createCustomer();
+    const before = await stock(tomato);
+    const res = await placeOrder(c.token, c.addressId, [{ listing: tomato, quantity: 1 }]);
+    const order = res.body.data.order;
+    const acceptBy = new Date(order.groups[0].acceptBy).getTime();
+    expect(acceptBy).toBeGreaterThan(Date.now() + 23 * 3600_000);
+    expect(acceptBy).toBeLessThan(Date.now() + 25 * 3600_000);
+
+    expect((await expireUnacceptedGroups()).groupsCancelled).toBe(0); // deadline not reached
+    await Order.updateOne({ _id: order.id }, { $set: { 'groups.0.acceptBy': new Date(Date.now() - 1000) } });
+    expect((await expireUnacceptedGroups()).groupsCancelled).toBe(1);
+
+    const o = await Order.findById(order.id);
+    expect(o!.status).toBe('cancelled');
+    expect(o!.groups[0].history.at(-1)!.note).toMatch(/did not confirm/);
+    expect(await stock(tomato)).toEqual(before);
+  });
+
+  it('a group the farmer already accepted is never cancelled by the deadline', async () => {
+    const c = await createCustomer();
+    const res = await placeOrder(c.token, c.addressId, [{ listing: spinach, quantity: 1 }]);
+    const order = res.body.data.order;
+    await http().put(`/api/orders/${order.id}/status`).set(auth(farmB.token)).send({ groupId: order.groups[0]._id, status: 'accepted' }).expect(200);
+    await Order.updateOne({ _id: order.id }, { $set: { 'groups.0.acceptBy': new Date(Date.now() - 1000) } });
+    expect((await expireUnacceptedGroups()).groupsCancelled).toBe(0);
+    expect((await Order.findById(order.id))!.groups[0].status).toBe('accepted');
+  });
+});
+
+describe('delivery code brute-force protection', () => {
+  it('locks after 5 wrong codes; the customer issues a new one; the old code stops working', async () => {
+    const c = await createCustomer();
+    const res = await placeOrder(c.token, c.addressId, [{ listing: spinach, quantity: 1 }]);
+    const order = res.body.data.order;
+    const g = order.groups[0];
+    const put = (body: object) => http().put(`/api/orders/${order.id}/status`).set(auth(farmB.token)).send({ groupId: g._id, ...body });
+    await put({ status: 'accepted' }).expect(200);
+    await put({ status: 'out_for_delivery' }).expect(200);
+
+    const wrong = g.handoverCode === '0000' ? '1111' : '0000';
+    for (let i = 1; i <= 4; i++) {
+      const r = await put({ status: 'delivered', code: wrong });
+      expect(r.status).toBe(400);
+      expect(r.body.error.message).toContain(`${5 - i} ${5 - i === 1 ? 'try' : 'tries'} left`);
+    }
+    expect((await put({ status: 'delivered', code: wrong })).status).toBe(423); // 5th wrong → locked
+    expect((await put({ status: 'delivered', code: g.handoverCode })).status).toBe(423); // even the right code is refused now
+
+    // Farmers never see the code or the attempt count; they do see that it is locked.
+    const queue = await http().get('/api/orders/farmer?view=active').set(auth(farmB.token));
+    const seen = queue.body.data.find((o: { id: string }) => o.id === order.id).groups[0];
+    expect(seen.codeLocked).toBe(true);
+    expect(seen).not.toHaveProperty('handoverCode');
+    expect(seen).not.toHaveProperty('codeAttempts');
+
+    // Only the owning customer can issue a new code.
+    const other = await createCustomer();
+    expect((await http().post(`/api/orders/${order.id}/groups/${g._id}/code`).set(auth(other.token))).status).toBe(404);
+    const renewed = await http().post(`/api/orders/${order.id}/groups/${g._id}/code`).set(auth(c.token));
+    expect(renewed.status).toBe(200);
+    const fresh = renewed.body.data.order.groups[0];
+    expect(fresh.codeLocked).toBe(false);
+    expect(fresh.codeAttempts).toBe(0);
+
+    if (fresh.handoverCode !== g.handoverCode) expect((await put({ status: 'delivered', code: g.handoverCode })).status).toBe(400);
+    await put({ status: 'delivered', code: fresh.handoverCode }).expect(200);
+    // Delivered groups can't get new codes.
+    expect((await http().post(`/api/orders/${order.id}/groups/${g._id}/code`).set(auth(c.token))).status).toBe(404);
+  });
+});
+
+describe('reserved-stock audit', () => {
+  it('finds listings whose reserved stock disagrees with open orders, and repairs them', async () => {
+    const { findReservationDrift, fixReservationDrift } = await import('../src/services/order/reservation-audit.service');
+    expect(await findReservationDrift()).toEqual([]); // every earlier test left things consistent
+
+    const c = await createCustomer();
+    await placeOrder(c.token, c.addressId, [{ listing: tomato, quantity: 2 }]);
+    expect(await findReservationDrift()).toEqual([]);
+
+    // Simulate a crash that left 5 units stuck as reserved.
+    const before = await stock(tomato);
+    await Inventory.updateOne({ _id: tomato }, { $inc: { quantityReserved: 5, quantityAvailable: -5 } });
+    const drift = await findReservationDrift();
+    expect(drift).toHaveLength(1);
+    expect(drift[0]).toMatchObject({ inventory: tomato, recorded: before.r + 5, expected: before.r });
+
+    const r = await fixReservationDrift();
+    expect(r).toMatchObject({ found: 1, fixed: 1 });
+    expect(await stock(tomato)).toEqual(before); // the 5 stuck units are sellable again
+    expect(await findReservationDrift()).toEqual([]);
   });
 });

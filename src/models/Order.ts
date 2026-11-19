@@ -62,6 +62,12 @@ export interface IOrderGroup {
   history: IStatusEvent[];
   /** 4-digit code the customer gives the farmer on delivery. */
   handoverCode: string;
+  /** Wrong codes entered so far; at ORDERS.maxCodeAttempts the code locks. */
+  codeAttempts: number;
+  /** Locked after too many wrong codes — the customer must issue a new code. */
+  codeLocked: boolean;
+  /** The farmer must accept or decline before this, or the group is cancelled. */
+  acceptBy?: Date;
   scheduledFor?: Date;
   paymentCollected: boolean;
   cancelReason?: string;
@@ -134,6 +140,9 @@ const groupSchema = new Schema<IOrderGroup>({
   status: { type: String, enum: GROUP_STATUSES, default: 'pending' },
   history: { type: [eventSchema], default: [] },
   handoverCode: { type: String, required: true },
+  codeAttempts: { type: Number, default: 0, min: 0 },
+  codeLocked: { type: Boolean, default: false },
+  acceptBy: Date,
   scheduledFor: Date,
   paymentCollected: { type: Boolean, default: false },
   cancelReason: { type: String, maxlength: 300 },
@@ -173,5 +182,7 @@ orderSchema.index({ customer: 1, createdAt: -1 });
 orderSchema.index({ 'groups.farmer': 1, 'groups.status': 1, createdAt: -1 });
 // Expiry job: unpaid online orders past their reservation window
 orderSchema.index({ paymentStatus: 1, reservationExpiresAt: 1 });
+// Acceptance job: pending groups past their farmer deadline
+orderSchema.index({ 'groups.status': 1, 'groups.acceptBy': 1 });
 
 export const Order = model<IOrder>('Order', orderSchema);

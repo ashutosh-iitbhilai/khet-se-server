@@ -48,11 +48,12 @@ Demo farmers use `@demo.khetse.test` emails with random, unusable passwords (set
 | `db:indexes` (`:prod`) | Create/update MongoDB indexes. Run once per deploy (auto-indexing is off in production). |
 | `seed:catalogue` / `seed:demo` | Catalogue · fictional demo farms (dev only) |
 | `bench` / `loadtest` | Query benchmark on a synthetic city-sized dataset · HTTP load test |
+| `reservations:check` (`:prod`) | Compare each listing's reserved stock with open orders; `-- --fix` repairs drift |
 
 ## Testing
 
 ```bash
-npm test     # 78 tests: unit + API integration
+npm test     # 96 tests: unit + API integration
 ```
 
 - **How they run:** the integration tests (`test/`) drive the real Express app (Supertest) against an **in-memory MongoDB replica set**, so checkout exercises real transactions. Each test file gets its own database.
@@ -62,8 +63,9 @@ npm test     # 78 tests: unit + API integration
   - quotes and idempotent ordering;
   - 6 buyers racing for 3 units (no overselling) and rollback when a line sells out mid-checkout;
   - the farmer flow with delivery codes, cancellations and access control;
-  - unpaid-order expiry;
-  - the full Razorpay flow against a mocked Razorpay API.
+  - unpaid-order expiry, the farmer acceptance deadline, delivery-code lockout and the reserved-stock audit;
+  - sessions: refresh-token rotation, reuse detection, logout everywhere, suspension;
+  - the full Razorpay flow and payment reconciliation against a mocked Razorpay API.
 - **Test MongoDB binary:** downloaded and cached on first run. To reuse a local `mongod`: `MONGOMS_SYSTEM_BINARY=/usr/bin/mongod npm test`.
 - **CI** (`.github/workflows/ci.yml`) runs typecheck, tests and build, and builds the Docker image.
 
@@ -82,8 +84,10 @@ docker compose run --rm api node dist/scripts/seed-catalogue.js
 |---|---|---|---|
 | GET | `/api/health` | – | DB connectivity check |
 | POST | `/api/auth/register` | – | `{ name, email, phone?, password, role: customer \| farmer }` |
-| POST | `/api/auth/login` | – | Sets httpOnly cookie, also returns `token` |
-| POST | `/api/auth/logout` | – | Clears cookie |
+| POST | `/api/auth/login` | – | Sets a 15-min access cookie and a 30-day refresh cookie (httpOnly, path `/api/auth`); also returns the access `token` |
+| POST | `/api/auth/refresh` | refresh cookie | Rotates the refresh token and issues a new access token. A reused token revokes that session family. |
+| POST | `/api/auth/logout` | – | Ends this session on the server and clears cookies |
+| POST | `/api/auth/logout-all` | any | Ends every session of the account → `{ sessionsEnded }` |
 | GET | `/api/auth/me` | any | Current user (cookie or `Authorization: Bearer`) |
 | PATCH | `/api/users/me` | any | Update name / phone |
 | GET | `/api/farmers/me` · `/api/farmers/me/overview` | farmer | Own profile + farms · dashboard counts |
@@ -113,9 +117,10 @@ docker compose run --rm api node dist/scripts/seed-catalogue.js
 | GET | `/api/orders/my-orders` | customer | Paginated |
 | GET | `/api/orders/:id` | owner / farmer in order / admin | Farmers see only their groups and never the delivery code |
 | POST | `/api/orders/:id/cancel` | customer | Pending groups only |
+| POST | `/api/orders/:id/groups/:groupId/code` | customer | New delivery code; unlocks a group locked after 5 wrong codes |
 | POST | `/api/orders/:id/pay` | customer | Start or retry online payment |
 | GET | `/api/orders/farmer?view=incoming\|active\|completed` | farmer | Order queue |
-| PUT | `/api/orders/:id/status` | farmer | `{ groupId, status, note?, code?, deliveryDate? }` |
+| PUT | `/api/orders/:id/status` | farmer | `{ groupId, status, note?, code?, deliveryDate? }`. A wrong code returns 400 with tries left; the 5th returns `423 CODE_LOCKED`. |
 | GET | `/api/payments/methods` | anyone | `{ cod: true, online: boolean }` |
 | POST | `/api/payments/razorpay/verify` | customer | Browser callback verification |
 | POST | `/api/payments/razorpay/webhook` | Razorpay | Raw body, `X-Razorpay-Signature` |

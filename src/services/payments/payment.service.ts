@@ -1,11 +1,19 @@
+import type { Types } from 'mongoose';
 import { Order, type OrderDocument } from '../../models/Order';
 import { Payment, type PaymentDocument } from '../../models/Payment';
 import { User } from '../../models/User';
 import { env } from '../../config/env';
+import { acceptDeadline } from '../../config/orders';
 import { ApiError } from '../../utils/ApiError';
 import { logger } from '../../utils/logger';
 import { derivePayment } from '../order/rules';
-import { createRazorpayOrder, razorpayEnabled, verifyCheckoutSignature, verifyWebhookSignature } from './razorpay';
+import {
+  createRazorpayOrder,
+  fetchOrderPayments,
+  razorpayEnabled,
+  verifyCheckoutSignature,
+  verifyWebhookSignature,
+} from './razorpay';
 
 export function availableMethods() {
   return { cod: true, online: razorpayEnabled() };
@@ -78,9 +86,67 @@ async function markPaid(payment: PaymentDocument, providerPaymentId: string) {
   const pay = derivePayment('online', 'paid', order.groups);
   await Order.updateOne(
     { _id: order._id, paymentStatus: { $in: ['pending', 'cancelled'] } },
-    { $set: { paymentStatus: pay.paymentStatus, refundDue: pay.refundDue, reservationExpiresAt: null } },
+    {
+      $set: {
+        paymentStatus: pay.paymentStatus,
+        refundDue: pay.refundDue,
+        reservationExpiresAt: null,
+        // Farmers see an online order only once it is paid, so their acceptance window starts now.
+        'groups.$[g].acceptBy': acceptDeadline(),
+      },
+    },
+    { arrayFilters: [{ 'g.status': 'pending' }] },
   );
   logger.info(`Payment received for ${order.orderNumber}: ₹${payment.amount}${pay.refundDue ? ` (refund due ₹${pay.refundDue})` : ''}`);
+}
+
+/**
+ * Asks Razorpay whether any payment attempt for this order was captured, and records it if
+ * so. This is the safety net for a customer who paid but whose browser callback and
+ * webhook never reached us. Throws if Razorpay can't be reached.
+ */
+export async function reconcileOrder(orderId: string | Types.ObjectId): Promise<'paid' | 'unpaid'> {
+  const attempts = await Payment.find({ order: orderId, provider: 'razorpay', providerOrderId: { $type: 'string' } });
+  for (const p of attempts) {
+    if (p.status === 'paid') return 'paid';
+    const captured = (await fetchOrderPayments(p.providerOrderId!)).find((r) => r.status === 'captured');
+    if (captured) {
+      logger.warn(`Reconciled a payment that never reported back: order ${String(orderId)}, payment ${captured.id}`);
+      await markPaid(p, captured.id);
+      return 'paid';
+    }
+  }
+  return 'unpaid';
+}
+
+/**
+ * Background sweep: re-checks recent Razorpay payment attempts that are still "created".
+ * Catches payments that land after an order expired (they become a refund due, not lost).
+ */
+export async function reconcilePendingPayments(now = new Date()) {
+  if (!razorpayEnabled()) return { checked: 0, recovered: 0 };
+  const stale = await Payment.find({
+    provider: 'razorpay',
+    status: 'created',
+    providerOrderId: { $type: 'string' },
+    createdAt: { $lte: new Date(now.getTime() - 2 * 60_000), $gte: new Date(now.getTime() - 48 * 3600_000) },
+  })
+    .sort({ createdAt: 1 })
+    .limit(50);
+
+  let recovered = 0;
+  for (const p of stale) {
+    try {
+      const captured = (await fetchOrderPayments(p.providerOrderId!)).find((r) => r.status === 'captured');
+      if (captured) {
+        await markPaid(p, captured.id);
+        recovered++;
+      }
+    } catch (err) {
+      logger.warn(`Payment reconciliation skipped for ${p.providerOrderId}: ${(err as Error).message}`);
+    }
+  }
+  return { checked: stale.length, recovered };
 }
 
 export async function verifyCheckout(

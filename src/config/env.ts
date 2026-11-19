@@ -21,7 +21,11 @@ const envSchema = z.object({
   MONGO_AUTO_INDEX: z.enum(['true', 'false']).optional(),
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
-  JWT_EXPIRES_IN: z.string().default('7d'),
+  // Short-lived access token (sent with every request) + long-lived, revocable refresh token.
+  ACCESS_TOKEN_TTL: z.string().regex(/^\d+[smhd]$/, 'Use a duration like 15m or 1h').default('15m'),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  /** @deprecated Replaced by ACCESS_TOKEN_TTL + refresh sessions; ignored if set. */
+  JWT_EXPIRES_IN: z.string().optional(),
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
@@ -29,10 +33,17 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
 
   REDIS_URL: z.string().optional().default(''),
+  // Hosts farmers' photo links may point at (comma-separated). Uploads go to Cloudinary.
+  ALLOWED_IMAGE_HOSTS: z
+    .string()
+    .default('res.cloudinary.com,images.unsplash.com,upload.wikimedia.org')
+    .transform((v) => v.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)),
   CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
   CLOUDINARY_API_KEY: z.string().optional().default(''),
   CLOUDINARY_API_SECRET: z.string().optional().default(''),
   OSRM_URL: z.string().url().default('https://router.project-osrm.org'),
+  // Hours a farmer has to accept a new order before it is cancelled and its stock released.
+  FARMER_ACCEPT_HOURS: z.coerce.number().min(1).max(168).default(24),
   // Online payments (Razorpay). Leave empty to offer cash on delivery only.
   RAZORPAY_KEY_ID: z.string().optional().default(''),
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
@@ -63,4 +74,9 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+if (env.JWT_EXPIRES_IN) {
+  // eslint-disable-next-line no-console
+  console.warn('⚠️  JWT_EXPIRES_IN is no longer used. Sessions now use ACCESS_TOKEN_TTL (default 15m) and REFRESH_TOKEN_TTL_DAYS (default 30).');
+}
 export const isProd = env.NODE_ENV === 'production';

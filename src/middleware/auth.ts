@@ -4,6 +4,8 @@ import { verifyToken } from '../utils/jwt';
 import type { UserRole } from '../models/User';
 
 export const AUTH_COOKIE = 'khetse_token';
+/** httpOnly refresh-token cookie, scoped to /api/auth. */
+export const REFRESH_COOKIE = 'khetse_refresh';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -29,6 +31,7 @@ export const authenticate: RequestHandler = (req, _res, next) => {
     req.auth = { userId: payload.sub, role: payload.role };
     next();
   } catch {
+    // Usually just an expired 15-minute access token: the web client refreshes and retries.
     next(new ApiError(401, 'TOKEN_INVALID', 'Your session has expired. Please log in again.'));
   }
 };

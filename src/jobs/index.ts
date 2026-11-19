@@ -3,7 +3,9 @@
  * (every state change it makes is an atomic conditional update), so no distributed lock
  * is needed. Move to a queue (BullMQ on Redis) when jobs grow beyond simple sweeps.
  */
-import { expireUnpaidOrders } from '../services/order/order.service';
+import { expireUnacceptedGroups, expireUnpaidOrders } from '../services/order/order.service';
+import { reconcilePendingPayments } from '../services/payments/payment.service';
+import { findReservationDrift } from '../services/order/reservation-audit.service';
 import { logger } from '../utils/logger';
 
 interface Job {
@@ -19,6 +21,32 @@ const JOBS: Job[] = [
     run: async () => {
       const r = await expireUnpaidOrders();
       if (r.groupsCancelled) logger.info(`Released stock for ${r.groupsCancelled} unpaid order group(s)`);
+      if (r.recovered) logger.warn(`Recovered ${r.recovered} paid order(s) whose payment never reported back`);
+    },
+  },
+  {
+    name: 'expire-unaccepted-orders',
+    everyMs: 5 * 60_000,
+    run: async () => {
+      const r = await expireUnacceptedGroups();
+      if (r.groupsCancelled) logger.info(`Cancelled ${r.groupsCancelled} order group(s) farmers did not confirm in time`);
+    },
+  },
+  {
+    // Report-only: repairs are a deliberate operator action (npm run reservations:check -- --fix).
+    name: 'check-reserved-stock',
+    everyMs: 60 * 60_000,
+    run: async () => {
+      const drift = await findReservationDrift();
+      if (drift.length) logger.warn(`Reserved stock is out of step with open orders on ${drift.length} listing(s); run reservations:check`, drift.slice(0, 5));
+    },
+  },
+  {
+    name: 'reconcile-payments',
+    everyMs: 5 * 60_000,
+    run: async () => {
+      const r = await reconcilePendingPayments();
+      if (r.recovered) logger.warn(`Reconciled ${r.recovered} payment(s) that never reported back`);
     },
   },
 ];

@@ -27,7 +27,7 @@
 
 - **Two independent apps.** The client never touches the database; it speaks only to the REST API (`NEXT_PUBLIC_API_URL`). Each app has its own `package.json`, `.env`, build and deploy.
 - **Layered backend.** `routes` (wiring) → `validators` (Zod) → `controllers` (HTTP in/out only) → `services` (all business logic) → `models` (Mongoose). Services never see `req`/`res`.
-- **Stateless API.** JWT auth + no in-process session state, so the server scales horizontally behind a load balancer. Redis is optional and degrades gracefully when absent.
+- **Horizontally scalable API.** Each request is checked with a short-lived (15 min) JWT, so no lookup is needed per request. Refresh tokens are stored hashed in MongoDB (`sessions`), so logout, "sign out everywhere" and suspension take effect within one access-token lifetime. No session state lives in the process, so the server scales horizontally behind a load balancer. Redis is optional and degrades gracefully when absent.
 - **Multi-city ready.** Every farm, address and order carries a `city` slug; geo queries are radius-bound so a city is just a data partition. Sharding is deferred until real load justifies it (shard key candidate: `city`).
 - **Recommendation engine is its own service** (`services/recommendation.service.ts`) with weights in config, so it can be tuned or replaced without touching anything else.
 
@@ -107,7 +107,7 @@ Responses: `{ success, data, meta? }` or `{ success: false, error: { code, messa
 
 | Area | Method & path | Auth |
 |---|---|---|
-| Auth | `POST /api/auth/register` · `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/me` | public / any |
+| Auth | `POST /api/auth/register` · `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/logout` · `POST /api/auth/logout-all` · `GET /api/auth/me` | public / any |
 | Farmers | `GET /api/farmers/nearby?lng&lat&radiusKm` · `GET /api/farmers/:id` · `POST /api/farmers/profile` · `PUT /api/farmers/profile` | public / farmer |
 | Farms | `GET /api/farms/mine` · `POST /api/farms` · `PUT /api/farms/:id` | farmer |
 | Products (catalogue) | `GET /api/products?type&category&q` · `GET /api/products/:id` · `POST/PUT/DELETE /api/products/:id` | public / admin |

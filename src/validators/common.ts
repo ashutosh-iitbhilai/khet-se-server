@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Types } from 'mongoose';
+import { env } from '../config/env';
 
 export const objectId = z.string().refine((v) => Types.ObjectId.isValid(v), 'Invalid id');
 
@@ -12,9 +13,25 @@ export const pagination = {
 
 export const httpUrl = z.string().trim().url('Must be a valid URL').refine((v) => /^https:\/\//.test(v), 'Must be an https URL');
 
-/** An uploaded https image, or a self-hosted asset path served by the web client (e.g. /images/catalogue/tomato.jpg). */
+const IMAGE_HOSTS_MESSAGE = `Photos must come from ${env.ALLOWED_IMAGE_HOSTS.join(', ')}`;
+
+// Zod still runs refinements after an earlier check (like .url()) fails, so never assume a valid URL here.
+function approvedImageHost(value: string) {
+  try {
+    return env.ALLOWED_IMAGE_HOSTS.includes(new URL(value).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A photo shown to other users: an https URL on an approved image host (our Cloudinary
+ * account, or the photo libraries the catalogue uses), or a self-hosted asset path served by
+ * the web client (e.g. /images/catalogue/tomato.jpg). Arbitrary hosts are refused so a
+ * listing can't make every visitor's browser load content from an unknown server.
+ */
 export const imageRef = z.union([
-  httpUrl,
+  httpUrl.refine(approvedImageHost, IMAGE_HOSTS_MESSAGE),
   z.string().trim().regex(/^\/images\/[a-z0-9/_-]+\.(jpg|jpeg|png|webp)$/i, 'Must be an https URL or /images/… path'),
 ]);
 

@@ -15,7 +15,7 @@ async function main() {
   const mongoose = (await import('mongoose')).default;
   // Register every model.
   await Promise.all(
-    ['User', 'Farmer', 'Farm', 'Product', 'Inventory', 'Address', 'Order', 'Payment', 'Delivery'].map((m) => import(`../models/${m}`)),
+    ['User', 'Farmer', 'Farm', 'Product', 'Inventory', 'Address', 'Order', 'Payment', 'Delivery', 'Session'].map((m) => import(`../models/${m}`)),
   );
   await connectDatabase();
   try {

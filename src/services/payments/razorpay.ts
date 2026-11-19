@@ -15,11 +15,36 @@ export interface RazorpayOrder {
   status: string;
 }
 
+const API = 'https://api.razorpay.com/v1';
+const authHeader = () => `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64')}`;
+
+export interface RazorpayPayment {
+  id: string;
+  order_id: string;
+  status: 'created' | 'authorized' | 'captured' | 'refunded' | 'failed';
+  amount: number; // paise
+}
+
+/**
+ * All payment attempts made against a Razorpay order. Used to reconcile orders whose
+ * browser callback and webhook never arrived. Throws if Razorpay can't be reached.
+ */
+export async function fetchOrderPayments(razorpayOrderId: string): Promise<RazorpayPayment[]> {
+  const res = await fetch(`${API}/orders/${encodeURIComponent(razorpayOrderId)}/payments`, {
+    headers: { Authorization: authHeader() },
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
+  const json = res ? await res.json().catch(() => null) : null;
+  if (!res?.ok || !Array.isArray(json?.items)) {
+    throw new ApiError(502, 'PAYMENT_PROVIDER_ERROR', 'Could not check payment status with Razorpay');
+  }
+  return json.items as RazorpayPayment[];
+}
+
 export async function createRazorpayOrder(amountInr: number, receipt: string, notes: Record<string, string>): Promise<RazorpayOrder> {
-  const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');
-  const res = await fetch('https://api.razorpay.com/v1/orders', {
+  const res = await fetch(`${API}/orders`, {
     method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount: Math.round(amountInr * 100), currency: 'INR', receipt, notes }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);

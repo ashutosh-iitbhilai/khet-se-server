@@ -38,6 +38,8 @@ const paymentSchema = new Schema<IPayment>(
   { timestamps: true, toJSON: jsonTransform },
 );
 
+// Reconciliation sweep: recent attempts still waiting for a result
+paymentSchema.index({ provider: 1, status: 1, createdAt: 1 });
 paymentSchema.index({ providerOrderId: 1 }, { unique: true, partialFilterExpression: { providerOrderId: { $type: 'string' } } });
 paymentSchema.index({ providerPaymentId: 1 }, { unique: true, partialFilterExpression: { providerPaymentId: { $type: 'string' } } });
 

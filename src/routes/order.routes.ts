@@ -9,6 +9,7 @@ import { addressIdSchema, createAddressSchema, updateAddressSchema } from '../va
 import {
   cancelSchema,
   farmerOrdersSchema,
+  groupCodeSchema,
   myOrdersSchema,
   orderIdSchema,
   placeOrderSchema,
@@ -37,6 +38,7 @@ export const orderRoutes = Router()
   .get('/:id', authenticate, validate(orderIdSchema), asyncHandler(ctrl.getOne))
   .put('/:id/status', ...farmerOnly, validate(updateStatusSchema), asyncHandler(ctrl.updateStatus))
   .post('/:id/cancel', ...customerOnly, validate(cancelSchema), asyncHandler(ctrl.cancel))
+  .post('/:id/groups/:groupId/code', ...customerOnly, validate(groupCodeSchema), asyncHandler(ctrl.newCode))
   .post('/:id/pay', ...customerOnly, validate(orderIdSchema), asyncHandler(ctrl.retryPayment));
 
 const verifySchema = z.object({
