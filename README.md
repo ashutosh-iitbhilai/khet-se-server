@@ -43,6 +43,8 @@ Demo farmers use `@demo.khetse.test` emails with random, unusable passwords (set
 
 [docs/report/khet_se_report.pdf](docs/report/khet_se_report.pdf) (LaTeX source alongside): requirements, architecture, algorithms, functionality with screenshots, and evaluation.
 
+ACM-format version: [docs/report/khet_se_acm_report.pdf](docs/report/khet_se_acm_report.pdf) (source: `khet_se_acm_report.tex`; build with `pdflatex` twice from `docs/report/`).
+
 ## Scripts
 
 | Script | Purpose |
